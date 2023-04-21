@@ -38,6 +38,7 @@ if __name__ == "__main__":
     SN = Sensor_Node(hostname, args.port, args.baud, args.int, args.addr, csv_dir)
     while True:
         try:
+            SN.check()
             SN.start()
         except KeyboardInterrupt:
             logging.info("Interrupted!")

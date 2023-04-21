@@ -7,7 +7,7 @@ class ZMQ_Publisher():
     def __init__(self, address='localhost'):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
-        self.socket.connect("tcp://" + address + ":5556")
+        self.socket.connect(f"tcp://{address}:5556")
 
 
     # function for sending a custom multipart message

@@ -24,15 +24,11 @@ class Cybres_MU:
 
         self.start_char = "Z"
         
-
-    def return_serial(self):
-        return self.ser.read(1).decode('ascii')
-
     # Finds the start of the next data set
     def find_start(self):
         start_found = False
         while not start_found:
-            char = self.return_serial()
+            char = self.ser.read(1).decode('ascii')
             if char == 'A':
                 start_found = True
         self.start_char = char
@@ -44,7 +40,7 @@ class Cybres_MU:
         if self.start_char != 'A':
             self.find_start()
         while not end_found:
-            next_char = self.return_serial()
+            next_char = self.ser.read(1).decode('ascii')
             if (next_char == 'Z'):
                 end_found = True
             else:
@@ -52,25 +48,23 @@ class Cybres_MU:
             self.start_char = next_char
         return line[:-1]
 
-    def restart(self):
-        # restart MU
-        self.ser.write(b'sr*')
+    def get_initial_status(self):
+        self.ser.write(b',ss*')
+        return self._get_response(sleep_time=0.5)
 
+    def restart(self):
+        self.ser.write(b',sr*')
 
     def start_measurement(self):
-        # start measurement
-        self.ser.write(b'ms*')
+        self.ser.write(b',ms*')
         
-
     def stop_measurement(self):
-        # stop measurement
-        self.ser.write(b'mp*')
+        self.ser.write(b',mp*')
 
-    
     def set_measurement_interval(self, interval):
-        # set interval between measurements
-        set_interval = 'mi{:05}*'.format(interval)
+        set_interval = ',mi{:05}*'.format(interval)
         self.ser.write(set_interval.encode())
+        return self._get_response(sleep_time=0.5)
 
     def to_flash(self):
         self.ser.write(b'sf2*')
@@ -90,6 +84,13 @@ class Cybres_MU:
             if char == 'A':
                 counter +=1
                 print(f"-----------------{counter}---------------------------")
+    
+    def _get_response(self, sleep_time=0.1):
+        time.sleep(sleep_time)
+        response = ""
+        while self.ser.in_waiting:
+            response += self.ser.read(1).decode('ascii')
+        return response
 
 
 def main():
