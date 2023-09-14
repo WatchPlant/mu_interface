@@ -9,10 +9,11 @@ from mu_interface.Utilities.data2csv import data2csv
 
 class Edge_Device():
 
-    def __init__(self, file_path):
+    def __init__(self, csv_path, cfg_path=None):
         self.sub = ZMQ_Subscriber()
-        self.file_path = file_path
+        self.csv_path = csv_path
         self.csv_objects = {}
+        self.cfg_path = cfg_path
         self.msg_counter = Counter()
         self.start_time = None
 
@@ -22,7 +23,7 @@ class Edge_Device():
         """
         self.start_time = datetime.datetime.now()
         logging.info("Started listening at %s.", self.start_time.strftime("%d.%m.%Y. %H:%M:%S"))
-        logging.info("Saving data to: %s", self.file_path)
+        logging.info("Saving data to: %s", self.csv_path)
         last_csv_time = datetime.datetime.now()
         last_info_time = datetime.datetime.now()
         
@@ -78,7 +79,7 @@ class Edge_Device():
                     file_name = f"{node}_{current_time.strftime('%Y_%m_%d-%H_%M_%S')}.csv"
                     file_path = self.csv_objects[node].file_path
                     additionalSensors = copy.deepcopy(self.csv_objects[node].additionalSensors)
-                    self.csv_objects[sender] = data2csv(file_path, file_name, additionalSensors)
+                    self.csv_objects[sender] = data2csv(file_path, file_name, additionalSensors, self.cfg_path)
                 last_csv_time = current_time
 
 
@@ -87,9 +88,11 @@ class Edge_Device():
         if sender not in self.csv_objects:
             file_name = f"{sender}_{datetime.datetime.now().strftime('%Y_%m_%d-%H_%M_%S')}.csv"
             if additionalSensors == "energy":
-                self.csv_objects[sender] = data2csv(self.file_path / sender / "energy", file_name, additionalSensors)
+                self.csv_objects[sender] = data2csv(self.csv_path / sender / "energy", 
+                                                    file_name, additionalSensors, self.cfg_path)
             else:
-                self.csv_objects[sender] = data2csv(self.file_path / sender[:-5] / sender[-4:], file_name, additionalSensors)
+                self.csv_objects[sender] = data2csv(self.csv_path / sender[:-5] / sender[-4:], 
+                                                    file_name, additionalSensors, self.cfg_path)
             logging.info("Created file: %s", file_name)
 
         # Read and format the data.
