@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 #from datetime import datetime
 import datetime
-import logging
 import json
+import logging
+import os
 import time
 from pathlib import Path
 
 import requests
+import tqdm
 import yaml
 from requests.adapters import HTTPAdapter, Retry
 
@@ -16,8 +18,8 @@ from mu_interface.Utilities.log_formatter import setup_logger
 
 # TODO: error handling
 
-url = "https://stupefied-poitras.185-23-116-208.plesk.page/api/"
-headers = {"Content-Type": "application/json", "Authorization": "Basic dGhpc19pc190aGVfcGFzc3dvcmQ="}
+url = os.environ["WP_API_URL"]
+headers = {"Content-Type": "application/json", "Authorization": os.environ["WP_API_AUTH"]}
 
 
 class HTTPClient(object):
@@ -34,8 +36,8 @@ class HTTPClient(object):
         self.known_data_fields = None
         self.known_nodes = None
                 
-        if not self.node_exists():
-            self.register_node()
+        # if not self.node_exists():
+        #     self.register_node()
         
     # DONE
     def get_nodes(self):
@@ -90,6 +92,11 @@ class HTTPClient(object):
             'handle': node_handle,
             'name': display_name
         }
+        
+        if self.node_exists(node_handle):
+            logging.info(f"Node {node_handle} already exists.")
+            return False
+        
         response = None
         try:
             response = requests.request("POST", url + query, json=payload, headers=headers)
@@ -349,20 +356,8 @@ class HTTPClient(object):
         query = 'sensordata'
         payload = {
             "node_handle": node_handle,
-            "data": {
-                "temp_external": 2,
-                "light_external": 2,
-                "humidity_external": 2,
-                "differential_potential_ch1": 11,
-                "differential_potential_ch2": 21,
-                "rf_power_emission": 0,
-                "transpiration": 0,
-                "air_pressure": 0,
-                "soil_moisture": 0,
-                "soil_temperature": 0,
-                "mag_total": 0
-            },
-            "date": "2023-11-06 12:32:00"
+            "data": data,
+            "date": timestamp
         }
         
         try:
@@ -377,13 +372,35 @@ class HTTPClient(object):
         
         return True
         
-        
+
+def add_data_fields_from_yaml(client, yaml_file_path):
+    with open(yaml_file_path, 'r') as stream:
+        try:
+            data_fields = yaml.safe_load(stream)
+            for field, settings in data_fields.items():
+                if settings['show']:
+                    client.add_data_field(field, settings['name'], settings['unit'])
+        except yaml.YAMLError as exc:
+            print(exc)
+
+
 def main():
-    setup_logger('TEST', level=logging.DEBUG)
+    from http_client_dev import make_weird_json_csv
+    
+    setup_logger('TEST', level=logging.INFO)
     logging.info('Starting HTTP client.')
     
-    client = HTTPClient('dev', 'Development Node')
-
+    # client = HTTPClient('dev', 'Development Node')
+    # add_data_fields_from_yaml(client, Path(__file__).parent.absolute() / "config/default_data_units.yaml")
+    
+    # for i in range(4):
+    #     client.delete_node(f'rpi{i}')
+    
+    for i in tqdm.trange(4, desc='Node'):
+        make_weird_json_csv(f'rpi{i}')
+    
+    # data = client.get_data('temp_external', 'month', [f'rpi{i}' for i in range(4)])
+    # print(data)
 
 if __name__ == '__main__':
     main()

@@ -173,3 +173,4 @@ Thumbs.db
 
 # some more ignores from till sry
 .idea/
+mu_interface/Utilities/data/*
