@@ -63,10 +63,11 @@ last_time = datetime.now()
 ## Measure and display loop
 while True:
     # Read data from sensor.
-    bus_voltage_solar = ina219_solar.bus_voltage        # voltage on V- (load side)
-    current_solar = ina219_solar.current                # current in mA
-    bus_voltage_battery = ina219_battery.bus_voltage    # voltage on V- (load side)
-    current_battery = ina219_battery.current            # current in mA
+    bus_voltage_solar = round(ina219_solar.bus_voltage, 2)        # voltage on V- (load side)
+    current_solar = round(ina219_solar.current, 1)                # current in mA
+    bus_voltage_battery = round(ina219_battery.bus_voltage, 2)    # voltage on V- (load side)
+    current_battery = round(ina219_battery.current, 1)            # current in mA
+
 
     # Publish data over ZMQ.
     payload = np.array([int(datetime.now().timestamp()), bus_voltage_solar, current_solar, bus_voltage_battery, current_battery, *ipaddr])
