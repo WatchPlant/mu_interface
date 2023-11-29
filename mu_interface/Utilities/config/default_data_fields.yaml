@@ -1,13 +1,13 @@
 # metadata
-'sender_hostname': True
-'MU_MM'     : True
-'MU_ID'     : True
+'sender_hostname': False
+'MU_MM'     : False
+'MU_ID'     : False
 'timestamp' : False
 'sweep_freq': False
 # channel 1
 'VImax_CH1': False
 'VImin_CH1': False
-'RMS_CH1'  : False
+'RMS_CH1'  : True
 'Phas_CH1' : False
 'VVmax_CH1': False
 'VVmin_CH1': False
@@ -15,13 +15,13 @@
 # channel 2
 'VImax_CH2': False
 'VImin_CH2': False
-'RMS_CH2'  : False
+'RMS_CH2'  : True
 'Phas_CH2' : False
 'VVmax_CH2': False
 'VVmin_CH2': False
 'Corr_CH2' : False
 # system data
-'temp_PCB'       : True
+'temp_PCB'       : False
 'temp_thermostat': False
 # magnetometer and accelerometer data
 'mag_X': True

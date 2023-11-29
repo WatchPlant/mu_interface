@@ -29,16 +29,25 @@ if __name__ == "__main__":
         help="Flag specifying that multiple MU sensors are connected to one sensor node.")
     args = parser.parse_args()
     
-    csv_dir = Path(args.dir)
-    if args.multi:
-        csv_dir /= args.port.split('/')[-1]
+    port_id = args.port.split('/')[-1]
 
     if args.addr == 'localhost':
-        hostname = args.port.split('/')[-1]
+        hostname = port_id
     elif args.multi:
-        hostname = f"{socket.gethostname()}_" + args.port.split('/')[-1]
+        hostname = f"{socket.gethostname()}_" + port_id
     else:
         hostname = socket.gethostname()
+    
+    with open('/home/rock/OrangeBox/status/experiment_number.txt', 'r') as f:
+        experiment_number = int(f.read())
+    experiment_name = f"{socket.gethostname()}_{experiment_number}"
+        
+    csv_dir = Path(args.dir)
+    csv_dir = csv_dir / experiment_name / 'MU' 
+    if args.multi:
+        csv_dir /= port_id
+        
+    file_prefix = f"{experiment_name}_{port_id}"
 
     setup_logger(hostname, level=logging.INFO)
     logging.info('Starting sensor node.')
@@ -49,7 +58,7 @@ if __name__ == "__main__":
     while True:
         while not connected:
             try:
-                SN = Sensor_Node(hostname, args.port, baud, args.int, args.addr, csv_dir)
+                SN = Sensor_Node(hostname, args.port, baud, args.int, args.addr, csv_dir, file_prefix)
                 connected = True
                 logging.info("Connected!")
             except serial.serialutil.SerialException as e:

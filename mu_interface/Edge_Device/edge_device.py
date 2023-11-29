@@ -6,6 +6,7 @@ from collections import Counter
 
 from zmq_subscriber import ZMQ_Subscriber
 from mu_interface.Utilities.data2csv import data2csv
+from mu_interface.Utilities.utils import TimeFormat
 
 class Edge_Device():
 
@@ -22,7 +23,7 @@ class Edge_Device():
         Start listening to MQTT messages and store data to csv files.
         """
         self.start_time = datetime.datetime.now()
-        logging.info("Started listening at %s.", self.start_time.strftime("%d.%m.%Y. %H:%M:%S"))
+        logging.info("Started listening at %s.", self.start_time.strftime(TimeFormat.log))
         logging.info("Saving data to: %s", self.csv_path)
         last_csv_time = datetime.datetime.now()
         last_info_time = datetime.datetime.now()
@@ -76,7 +77,7 @@ class Edge_Device():
                 logging.info("Creating new csv files.")
                 for node in self.csv_objects:
                     self.csv_objects[node].close_file()
-                    file_name = f"{node}_{current_time.strftime('%Y_%m_%d-%H_%M_%S')}.csv"
+                    file_name = f"{node}_{current_time.strftime(TimeFormat.file)}.csv"
                     file_path = self.csv_objects[node].file_path
                     additionalSensors = copy.deepcopy(self.csv_objects[node].additionalSensors)
                     self.csv_objects[sender] = data2csv(file_path, file_name, additionalSensors, self.cfg_path)
@@ -86,7 +87,7 @@ class Edge_Device():
     def save_data(self, sender, additionalSensors, payload):
         # Create a new csv file if it doesn't exist for this sender.
         if sender not in self.csv_objects:
-            file_name = f"{sender}_{datetime.datetime.now().strftime('%Y_%m_%d-%H_%M_%S')}.csv"
+            file_name = f"{sender}_{datetime.datetime.now().strftime(TimeFormat.file)}.csv"
             if additionalSensors == "energy":
                 self.csv_objects[sender] = data2csv(self.csv_path / sender / "energy", 
                                                     file_name, additionalSensors, self.cfg_path)
@@ -114,7 +115,7 @@ class Edge_Device():
         """
         Stop the subscriber and close all open csv files.
         """
-        logging.info("Stopped listening at %s.", datetime.datetime.now().strftime("%d.%m.%Y. %H:%M:%S"))
+        logging.info("Stopped listening at %s.", datetime.datetime.now().strftime(TimeFormat.log))
         for node in self.csv_objects:
             self.csv_objects[node].close_file()
         self.csv_objects = {}

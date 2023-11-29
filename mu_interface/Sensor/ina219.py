@@ -13,7 +13,7 @@ from adafruit_ina219 import ADCResolution, BusVoltageRange, INA219
 
 from zmq_publisher import ZMQ_Publisher
 from mu_interface.Utilities.data2csv import data2csv
-from mu_interface.Utilities.utils import get_ip_address
+from mu_interface.Utilities.utils import get_ip_address, TimeFormat
 
 
 ## Parse arguments.
@@ -53,9 +53,9 @@ ina219_battery.bus_voltage_range = BusVoltageRange.RANGE_16V
 # Set up csv storing.
 file_path = Path(args.dir)
 start_time = datetime.now()
-print("Measurement started at {}.".format(start_time.strftime('%d.%m.%Y. %H:%M:%S')))
+print("Measurement started at {}.".format(start_time.strftime(TimeFormat.log)))
 print(f"Saving data to: {file_path}")
-file_name = f"{hostname}_{start_time.strftime('%Y_%m_%d-%H_%M_%S')}.csv"
+file_name = f"{hostname}_{start_time.strftime(TimeFormat.file)}.csv"
 csv_object = data2csv(file_path, file_name, "energy")
 csv_object.fix_ownership()
 last_time = datetime.now()
@@ -78,7 +78,7 @@ while True:
     if current_time.hour in {0, 12} and current_time.hour != last_time.hour:
         print("Creating a new csv file.")
         csv_object.close_file()
-        file_name = f"{hostname}_{current_time.strftime('%Y_%m_%d-%H_%M_%S')}.csv"
+        file_name = f"{hostname}_{current_time.strftime(TimeFormat.file)}.csv"
         csv_object = data2csv(file_path, file_name, "energy")
         csv_object.fix_ownership()
         last_time = current_time

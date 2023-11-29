@@ -10,17 +10,20 @@ from cybres_mu import Cybres_MU
 # from Additional_Sensors.rgbtcs34725 import RGB_TCS34725
 from zmq_publisher import ZMQ_Publisher
 from mu_interface.Utilities.data2csv import data2csv
-#from mu_interface.Utilities.HTTP_client import HTTPClient                                    #
+from mu_interface.Utilities.utils import TimeFormat
+#from mu_interface.Utilities.HTTP_client import HTTPClient
+
 
 class Sensor_Node():
 
-    def __init__(self, hostname, port, baudrate, meas_interval, address, file_path):
+    def __init__(self, hostname, port, baudrate, meas_interval, address, file_path, file_prefix):
         self.mu = Cybres_MU(port, baudrate)
         self.pub = ZMQ_Publisher(address)
         # self.client = HTTPClient(hostname, hostname)                            #
         self.hostname = hostname
         self.measurment_interval = meas_interval
         self.file_path = file_path
+        self.file_prefix = file_prefix
         self.csv_object = None
         self.msg_count = 0
         self.start_time = None
@@ -51,11 +54,11 @@ class Sensor_Node():
 
         # Record the starting time and notify the user.
         self.start_time = datetime.datetime.now()
-        logging.info("Measurement started at %s.", self.start_time.strftime("%d.%m.%Y. %H:%M:%S"))
+        logging.info("Measurement started at %s.", self.start_time.strftime(TimeFormat.log))
         logging.info("Saving data to: %s", self.file_path)
 
         # Create the file for storing measurement data.
-        file_name = f"{self.hostname}_{self.start_time.strftime('%Y_%m_%d-%H_%M_%S')}.csv"
+        file_name = f"{self.file_prefix}_{self.start_time.strftime(TimeFormat.file)}.csv"
         self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
         last_time = datetime.datetime.now()
 
@@ -64,8 +67,7 @@ class Sensor_Node():
             current_time = datetime.datetime.now()
             if current_time.hour in {0, 12} and current_time.hour != last_time.hour:
                 logging.info("Creating a new csv file.")
-                self.csv_object.close_file()
-                file_name = f"{self.hostname}_{current_time.strftime('%Y_%m_%d-%H_%M_%S')}.csv"
+                file_name = f"{self.file_prefix}_{current_time.strftime(TimeFormat.file)}.csv"
                 self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
                 last_time = current_time
 
@@ -166,10 +168,8 @@ class Sensor_Node():
         """
         Stop the measurement and clean up.
         """
-        logging.info("Measurement stopped at %s.", datetime.datetime.now().strftime("%d.%m.%Y. %H:%M:%S"))
+        logging.info("Measurement stopped at %s.", datetime.datetime.now().strftime(TimeFormat.log))
         self.mu.stop_measurement()
-        if self.csv_object is not None:
-            self.csv_object.close_file()
 
     def shutdown(self):
         """
@@ -186,5 +186,3 @@ class Sensor_Node():
         self.mu.ser.close()
         self.pub.socket.close()
         self.pub.context.term()
-        if self.csv_object is not None:
-            self.csv_object.close_file()
