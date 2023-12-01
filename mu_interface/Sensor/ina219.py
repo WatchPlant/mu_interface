@@ -77,7 +77,6 @@ while True:
     current_time = datetime.now()
     if current_time.hour in {0, 12} and current_time.hour != last_time.hour:
         print("Creating a new csv file.")
-        csv_object.close_file()
         file_name = f"{hostname}_{current_time.strftime(TimeFormat.file)}.csv"
         csv_object = data2csv(file_path, file_name, "energy")
         csv_object.fix_ownership()
