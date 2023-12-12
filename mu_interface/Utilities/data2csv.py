@@ -49,7 +49,8 @@ class data2csv:
         self.additionalSensors = additionalSensors
 
         if additionalSensors == "energy":
-            self.header = ["bus_voltage_solar", "current_solar", "bus_voltage_battery", "current_battery", "ip0", "ip1", "ip2", "ip3"]
+            # TODO: separate from mu_interface
+            self.header = ["bus_voltage_solar", "current_solar", "bus_voltage_battery", "current_battery", "temperature", "humidity"]
         else:
             if config_file is None:
                 config_file = Path(__file__).parent.absolute() / "config/default_data_fields.yaml"
