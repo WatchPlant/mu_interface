@@ -1,9 +1,44 @@
+import datetime
 import json
 import time
 from pathlib import Path
 
 import tqdm
 import yaml
+
+
+def sim_real_time(client):
+    import pandas as pd
+    
+    dataframes = {}
+    
+    for i in range(2):
+        node = f'rpi{i}'
+        data_file = Path(__file__).parent.absolute() / f"data/{node}_reformatted.csv"
+        config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
+        
+        client.add_node(node, node)
+        
+        with open(config_file) as cf:
+            config = yaml.safe_load(cf)
+            keys = [key for key in config if config[key] is True]
+            
+        df = pd.read_csv(data_file, sep=',', header=0)
+        df = df[keys]
+
+        dataframes[node] = df
+        
+    min_len = min([len(dataframes[node]) for node in dataframes])
+    
+    for i in tqdm.trange(min_len, desc='Data'):
+        for node in dataframes:
+            data_line = dataframes[node].iloc[i]
+            # current utc time
+            timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            data = data_line.to_dict()
+            client.add_data2(data, timestamp, node)
+        time.sleep(10)
+    
 
 
 def upload_data(client, node):

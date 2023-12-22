@@ -385,22 +385,13 @@ def add_data_fields_from_yaml(client, yaml_file_path):
 
 
 def main():
-    from http_client_dev import make_weird_json_csv
+    from http_client_dev import sim_real_time
     
-    setup_logger('TEST', level=logging.INFO)
+    setup_logger('TEST', level=logging.DEBUG)
     logging.info('Starting HTTP client.')
     
-    # client = HTTPClient('dev', 'Development Node')
-    # add_data_fields_from_yaml(client, Path(__file__).parent.absolute() / "config/default_data_units.yaml")
-    
-    # for i in range(4):
-    #     client.delete_node(f'rpi{i}')
-    
-    for i in tqdm.trange(4, desc='Node'):
-        make_weird_json_csv(f'rpi{i}')
-    
-    # data = client.get_data('temp_external', 'month', [f'rpi{i}' for i in range(4)])
-    # print(data)
+    client = HTTPClient('dev', 'Development Node')
+    sim_real_time(client)
 
 if __name__ == '__main__':
     main()
