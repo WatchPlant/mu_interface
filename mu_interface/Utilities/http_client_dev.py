@@ -9,28 +9,28 @@ import yaml
 
 def sim_real_time(client):
     import pandas as pd
-    
+
     dataframes = {}
-    
+
     for i in range(2):
-        node = f'rpi{i}'
+        node = f"rpi{i}"
         data_file = Path(__file__).parent.absolute() / f"data/{node}_reformatted.csv"
         config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
-        
+
         client.add_node(node, node)
-        
+
         with open(config_file) as cf:
             config = yaml.safe_load(cf)
             keys = [key for key in config if config[key] is True]
-            
-        df = pd.read_csv(data_file, sep=',', header=0)
+
+        df = pd.read_csv(data_file, sep=",", header=0)
         df = df[keys]
 
         dataframes[node] = df
-        
+
     min_len = min([len(dataframes[node]) for node in dataframes])
-    
-    for i in tqdm.trange(min_len, desc='Data'):
+
+    for i in tqdm.trange(min_len, desc="Data"):
         for node in dataframes:
             data_line = dataframes[node].iloc[i]
             # current utc time
@@ -38,84 +38,89 @@ def sim_real_time(client):
             data = data_line.to_dict()
             client.add_data2(data, timestamp, node)
         time.sleep(10)
-    
 
 
 def upload_data(client, node):
     import pandas as pd
-    
+
     data_file = Path(__file__).parent.absolute() / f"data/{node}_reformatted.csv"
     config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
-    
+
     client.add_node(node, node)
-    
+
     with open(config_file) as cf:
         config = yaml.safe_load(cf)
         keys = [key for key in config if config[key] is True]
-        
-    df = pd.read_csv(data_file, sep=',', header=0)
+
+    df = pd.read_csv(data_file, sep=",", header=0)
     df = df[keys]
     df = df.tail(int(len(df) / 4))
     df = df.iloc[::10]
-    
-    for i in tqdm.trange(len(df), desc='Data'):
+
+    for i in tqdm.trange(len(df), desc="Data"):
         data_line = df.iloc[i]
-        timestamp = data_line['timestamp']
-        data_line = data_line.drop('timestamp')
+        timestamp = data_line["timestamp"]
+        data_line = data_line.drop("timestamp")
         data = data_line.to_dict()
         client.add_data2(data, timestamp, node)
         time.sleep(1)
-        
+
+
 def make_json(node):
     import pandas as pd
-    
+
     data_file = Path(__file__).parent.absolute() / f"data/{node}_reformatted.csv"
     config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
-    
+
     with open(config_file) as cf:
         config = yaml.safe_load(cf)
         keys = [key for key in config if config[key] is True]
-        
-    df = pd.read_csv(data_file, sep=',', header=0)
-    
+
+    df = pd.read_csv(data_file, sep=",", header=0)
+
     # Create a new column 'data' by selecting the columns of interest
-    df['data'] = df[keys].apply(lambda row: row.to_dict(), axis=1)
+    df["data"] = df[keys].apply(lambda row: row.to_dict(), axis=1)
 
     # Create the final JSON structure
-    json_entries = df.apply(lambda row: {
-        'node_handle': row['sender_hostname'],
-        'date': row['timestamp'],
-        'created_at': row['timestamp'],
-        'updated_at': row['timestamp'],
-        'data': row['data']
-    }, axis=1).tolist()
+    json_entries = df.apply(
+        lambda row: {
+            "node_handle": row["sender_hostname"],
+            "date": row["timestamp"],
+            "created_at": row["timestamp"],
+            "updated_at": row["timestamp"],
+            "data": row["data"],
+        },
+        axis=1,
+    ).tolist()
 
     # Write the JSON data to a file
     json_file_path = Path(__file__).parent.absolute() / f"data/{node}.json"
-    with open(json_file_path, 'w') as json_file:
+    with open(json_file_path, "w") as json_file:
         json.dump(json_entries, json_file, indent=2)
-        
+
+
 def make_csv(node):
     import pandas as pd
-    
+
     data_file = Path(__file__).parent.absolute() / f"data/{node}_reformatted.csv"
     config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
-    
+
     with open(config_file) as cf:
         config = yaml.safe_load(cf)
         keys = [key for key in config if config[key] is True]
-        
-    df = pd.read_csv(data_file, sep=',', header=0)
-    
+
+    df = pd.read_csv(data_file, sep=",", header=0)
+
     # Create a new column 'data' by selecting the columns of interest
     df = df[keys]
-    df = df.rename(columns={'sender_hostname': 'node_handle', 'timestamp': 'date'})
-    df['created_at'] = df['date']
-    df['updated_at'] = df['date']    
+    df = df.rename(columns={"sender_hostname": "node_handle", "timestamp": "date"})
+    df["created_at"] = df["date"]
+    df["updated_at"] = df["date"]
 
     csv_out_file_path = Path(__file__).parent.absolute() / f"data/{node}_new.csv"
     df.to_csv(csv_out_file_path, index=False)
-    
+
+
 def make_weird_json_csv(node):
     """
     Output file format example:
@@ -128,28 +133,28 @@ def make_weird_json_csv(node):
     import csv
 
     import pandas as pd
-    
+
     data_file = Path(__file__).parent.absolute() / f"data/{node}_reformatted.csv"
     config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
-    
+
     with open(config_file) as cf:
         config = yaml.safe_load(cf)
         data_keys = [key for key in config if config[key] is True]
-        
-    all_keys = data_keys + ['sender_hostname', 'timestamp']
-        
-    df = pd.read_csv(data_file, sep=',', header=0)
+
+    all_keys = data_keys + ["sender_hostname", "timestamp"]
+
+    df = pd.read_csv(data_file, sep=",", header=0)
     df = df[all_keys]
-    
-    df = df.rename(columns={'sender_hostname': 'node_handle', 'timestamp': 'date'})
-    df['created_at'] = df['date']
-    df['updated_at'] = df['date']
-    df = df.astype(object) 
-    
+
+    df = df.rename(columns={"sender_hostname": "node_handle", "timestamp": "date"})
+    df["created_at"] = df["date"]
+    df["updated_at"] = df["date"]
+    df = df.astype(object)
+
     # Create a new column 'data' by selecting the columns of interest
-    df['data'] = df[data_keys].apply(lambda row: row.to_json(), axis=1)
+    df["data"] = df[data_keys].apply(lambda row: row.to_json(), axis=1)
     df.drop(data_keys, axis=1, inplace=True)
 
     # Write the JSON data to a file
     out_path = Path(__file__).parent.absolute() / f"data/{node}_json.csv"
-    df.to_csv(out_path, sep=';', index=True, index_label='id', quoting=csv.QUOTE_ALL)
+    df.to_csv(out_path, sep=";", index=True, index_label="id", quoting=csv.QUOTE_ALL)
