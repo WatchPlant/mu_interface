@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-import sys
-import re
 import time
 import logging
 import datetime
 import numpy as np
 
 from cybres_mu import Cybres_MU
+
 # from Additional_Sensors.rgbtcs34725 import RGB_TCS34725
-from zmq_publisher import ZMQ_Publisher
+from fake_zmq_publisher import ZMQ_Publisher
 from mu_interface.Utilities.data2csv import data2csv
 from mu_interface.Utilities.utils import TimeFormat
-#from mu_interface.Utilities.HTTP_client import HTTPClient
+# from mu_interface.Utilities.HTTP_client import HTTPClient
 
 
-class Sensor_Node():
-
+class Sensor_Node:
     def __init__(self, hostname, port, baudrate, meas_interval, address, file_path, file_prefix):
         self.mu = Cybres_MU(port, baudrate)
         self.pub = ZMQ_Publisher(address)
-        # self.client = HTTPClient(hostname, hostname)                            #
+        # self.client = HTTPClient(hostname, hostname)
         self.hostname = hostname
         self.measurment_interval = meas_interval
         self.file_path = file_path
@@ -33,8 +31,8 @@ class Sensor_Node():
         # Add the names of the additional data columns to the list
         # e.g. ['ozon-conc', 'intensity-red', 'intensity-blue']
         # self.rgb = RGB_TCS34725()
-        self.additionalSensors = []#['light-red', 'light-green', 'light-blue', 'color-temperature', 'light-intensity']
-        
+        self.additionalSensors = []  # ['light-red', 'light-green', 'light-blue', 'color-temperature', 'light-intensity']
+
     def check(self):
         """
         Check the communication with the device by requesting a status message.
@@ -76,17 +74,20 @@ class Sensor_Node():
             header, payload = self.classify_message(next_line)
 
             # Send data to Edge device via ZMQ if it's valid.
-            if header != None:
+            if header is not None:
                 self.pub.publish(header, self.additionalSensors, payload)
 
             # Store the data to the csv file.
-            if header[1] == 1:
+            if header is not None and header[1] == 1:
                 self.msg_count += 1
                 e = self.csv_object.write2csv([self.hostname] + payload.tolist())
-     #           self.client.add_data(payload, self.additionalSensors)                                                   #
+                #  self.client.add_data(payload, self.additionalSensors)
                 if e is not None:
-                    logging.error("Writing to csv file failed with error:\n%s\n\n\
-                        Continuing because this is not a fatal error.", e)
+                    logging.error(
+                        "Writing to csv file failed with error:\n%s\n\n\
+                        Continuing because this is not a fatal error.",
+                        e,
+                    )
 
             # Print out a status message roughly every 30 mins
             if self.msg_count % 180 == 0 and self.msg_count > 0:
@@ -105,7 +106,7 @@ class Sensor_Node():
         Returns:
             A tuple containing a header and payload for the MQTT message.
         """
-        counter = mu_line.count('#')
+        counter = mu_line.count("#")
         if counter == 0:
             # Line is pure data message
             messagetype = 1
@@ -118,9 +119,9 @@ class Sensor_Node():
             # Every 100 measurements the MU sends also its own
             # ID and measurement mode
             messagetype = 2
-            messages = mu_line.split('#')
-            mu_id = int(messages[1].split(' ')[1])
-            mu_mm = int(messages[2].split(' ')[1])
+            messages = mu_line.split("#")
+            mu_id = int(messages[1].split(" ")[1])
+            mu_mm = int(messages[2].split(" ")[1])
             # ID and mm get attached at the back of the data array
             payload = np.append([mu_mm, mu_id], self.transform_data(messages[0]))
 
@@ -129,7 +130,7 @@ class Sensor_Node():
             messagetype = 0
             payload = mu_line
             # ID and MM are saved from the header
-            lines = mu_line.split('\r\n')
+            lines = mu_line.split("\r\n")
             self.mu_id = int(lines[3].split()[1])
             self.mu_mm = int(lines[4].split()[1])
         else:
@@ -142,9 +143,8 @@ class Sensor_Node():
             # additionalValues = [getOzonValues(), getRGBValues()]
             # Important: len(self.sensors) == len(additionalValues), otherwise
             # it won't work
-            additionalValues = []#self.rgb.getData()#[]
+            additionalValues = []  # self.rgb.getData()#[]
             payload = np.append(payload, additionalValues)
-
 
         header = (self.hostname, messagetype, bool(self.additionalSensors))
         return header, payload
@@ -159,7 +159,7 @@ class Sensor_Node():
         Returns:
             A numpy array containing the MU data
         """
-        split_data = string_data.split(' ')
+        split_data = string_data.split(" ")
         timestamp = [int(time.mktime(datetime.datetime.now().timetuple()))]
         measurements = [int(elem) for elem in split_data[1:]]
         return np.array(timestamp + measurements)
@@ -178,7 +178,7 @@ class Sensor_Node():
         self.mu.restart()
         time.sleep(0.5)
         self.close()
-        
+
     def close(self):
         """
         Perform clean up of the sensor node.

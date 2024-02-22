@@ -28,30 +28,30 @@ if __name__ == "__main__":
     parser.add_argument('--multi', action='store_true',
         help="Flag specifying that multiple MU sensors are connected to one sensor node.")
     args = parser.parse_args()
-    
-    port_id = args.port.split('/')[-1]
 
-    if args.addr == 'localhost':
+    port_id = args.port.split("/")[-1]
+
+    if args.addr == "localhost":
         hostname = port_id
     elif args.multi:
         hostname = f"{socket.gethostname()}_" + port_id
     else:
         hostname = socket.gethostname()
-    
-    with open('/home/rock/OrangeBox/status/experiment_number.txt', 'r') as f:
+
+    with open(Path.home() / "OrangeBox/status/experiment_number.txt", "r") as f:
         experiment_number = int(f.read())
     experiment_name = f"{socket.gethostname()}_{experiment_number}"
-        
+
     csv_dir = Path(args.dir)
-    csv_dir = csv_dir / experiment_name / 'MU' 
+    csv_dir = csv_dir / experiment_name / "MU"
     if args.multi:
         csv_dir /= port_id
-        
+
     file_prefix = f"{experiment_name}_{port_id}"
 
     setup_logger(hostname, level=logging.INFO)
-    logging.info('Starting sensor node.')
-    
+    logging.info("Starting sensor node.")
+
     baud = args.baud
 
     connected = False

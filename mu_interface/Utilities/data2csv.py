@@ -2,7 +2,6 @@
 import os
 import csv
 import yaml
-from pandas import DataFrame
 from datetime import datetime
 from pathlib import Path
 
@@ -25,7 +24,7 @@ class data2csv:
         "differential_potential_CH2": (lambda d, c: (d[c] - 512000) / 1000),              # Mili Volts
         "transpiration": (lambda d, c: d[c] / 1000)                                       # Percent
     }
-    
+
     rounding = {
         "temp_external": 2,
         "temp_PCB": 2,
@@ -38,19 +37,25 @@ class data2csv:
         "air_pressure": 2,
         "differential_potential_CH1": 3,
         "differential_potential_CH2": 3,
-        "transpiration": 2
+        "transpiration": 2,
     }
 
     def __init__(self, file_path, file_name, additionalSensors, config_file=None):
-
         self.file_path = Path(file_path)
-        self.file_path.mkdir(parents=True, exist_ok=True) # make new directory
+        self.file_path.mkdir(parents=True, exist_ok=True)  # make new directory
         self.file_name = file_name
         self.additionalSensors = additionalSensors
 
         if additionalSensors == "energy":
             # TODO: separate from mu_interface
-            self.header = ["bus_voltage_solar", "current_solar", "bus_voltage_battery", "current_battery", "temperature", "humidity"]
+            self.header = [
+                "bus_voltage_solar",
+                "current_solar",
+                "bus_voltage_battery",
+                "current_battery",
+                "temperature",
+                "humidity",
+            ]
         else:
             if config_file is None:
                 config_file = Path(__file__).parent.absolute() / "config/default_data_fields.yaml"
@@ -58,18 +63,22 @@ class data2csv:
             with open(config_file) as stream:
                 config = yaml.safe_load(stream)
 
-            self.header = [key for key in config if config[key] is True] + (additionalSensors if additionalSensors != False else [])
-            self.filter = [i for i, x in enumerate(config.values()) if x] + ([j + len(config) for j in range(len(additionalSensors))] if additionalSensors != False else [])
+            # Names of stored columns.
+            self.header = [key for key in config if config[key]] + additionalSensors
+            # Indices of stored columns.
+            self.filter = [i for i, x in enumerate(config.values()) if x] + list(
+                range(len(config), len(config) + len(additionalSensors))
+            )
 
-        with open(self.file_path / self.file_name, 'w', newline='') as csvfile:
+        with open(self.file_path / self.file_name, "w", newline="") as csvfile:
             csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(['datetime'] + self.header)
+            csvwriter.writerow(["datetime"] + self.header)
 
     def fix_ownership(self):
         """Change the owner of the file to SUDO_UID"""
-        uid = os.environ.get('SUDO_UID')
-        gid = os.environ.get('SUDO_GID')
-        if uid is not None:
+        uid = os.environ.get("SUDO_UID")
+        gid = os.environ.get("SUDO_GID")
+        if uid is not None and gid is not None:
             full_path = self.file_path / self.file_name
             os.chown(full_path, int(uid), int(gid))
             for p in list(full_path.parents)[:-3]:
@@ -83,23 +92,32 @@ class data2csv:
             else:
                 timestamp = datetime.fromtimestamp(data[3]).strftime(TimeFormat.data)
                 filtered_data = [data[i] for i in self.filter]
-                df = DataFrame(data=[filtered_data], columns=self.header)
-                filtered_data = data2csv.transform_data(df)
+                # df = DataFrame(data=[filtered_data], columns=self.header)
+                # filtered_data = data2csv.transform_data(df)
+                filtered_data = data2csv.transform_data(filtered_data, self.header)
 
             data4csv = [timestamp] + filtered_data
-            with open(self.file_path / self.file_name, 'a', newline='') as csvfile:
+            with open(self.file_path / self.file_name, "a", newline="") as csvfile:
                 csvwriter = csv.writer(csvfile)
                 csvwriter.writerow(data4csv)
-            
+
         except Exception as e:
             return e
-    
-    @staticmethod    
-    def transform_data(df):
-        for column in df.columns:
-            if column in data2csv.transformations:
-                df[column] = round(data2csv.transformations[column](df, column), data2csv.rounding[column])
-                
-        return df.iloc[0].tolist()
-        
-        
+
+    # @staticmethod
+    # def transform_data(df):
+    #     for column in df.columnsns:
+    #         if column in data2csv.transformations:
+    #             df[column] = round(data2csv.transformations[column](df, column), data2csv.rounding[column])
+
+    #     return df.iloc[0].tolist()
+
+    @staticmethod
+    def transform_data(data, header):
+        df = {header[i]: data[i] for i in range(len(data))}
+        for i in range(len(data)):
+            key = header[i]
+            if key in data2csv.transformations:
+                data[i] = round(data2csv.transformations[key](df, key), data2csv.rounding.get(key, 2))
+
+        return data
