@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+from enum import Enum
 
 import requests
 import yaml
@@ -13,6 +14,13 @@ from requests.adapters import HTTPAdapter, Retry
 from mu_interface.Utilities.log_formatter import setup_logger
 
 # TODO: error handling
+
+class DateRange(Enum):
+    LAST_HOUR = "last_hour"
+    LAST_DAY = "last_day"
+    MONTH = "month"
+    TWELVE_MONTHS = "twelve_months"
+
 
 url = os.environ["WP_API_URL"]
 headers = {"Content-Type": "application/json", "Authorization": os.environ["WP_API_AUTH"]}
@@ -200,15 +208,13 @@ class HTTPClient(object):
 
         return True
 
-    # FIXME: why is data type needed
-    def get_data(self, data_type, date_range, node_handles=None,):
+    # DONE+
+    def get_data(self, date_range: DateRange, node_handles=None,):
         """
         Return all data entries from specified nodes.
 
         Args:
-            data_type (str): Type of data to retrieve.
-            date_range (str): Time range to retrieve data from.
-                              Possible values: 'last_hour', 'last_day', 'month', 'twelve_months'.
+            date_range (DateRange): Time range to retrieve data from.
             node_handles (List[str]): List of node_handles whose data shall be extracted.
 
         Returns:
@@ -223,23 +229,15 @@ class HTTPClient(object):
             node_handles = [self.node_handle]
         if not isinstance(node_handles, list):
             node_handles = [node_handles]
-        if self.known_data_fields is None:
-            self.get_data_fields()
-        if data_type not in self.known_data_fields:
-            logging.error(
-                f"Data type {data_type} is not known. Current limitation of the API is that only "
-                "data of specific type can be retrieved."
-            )
-            return False
-        if date_range not in ["last_hour", "last_day", "month", "twelve_months"]:
+        if not isinstance(date_range, DateRange):
             logging.error(f"Date range {date_range} is not known.")
             return False
 
         query = "sensordata-multiple"
-        payload = {"node_handles": node_handles, "date_range": date_range}
+        payload = {"node_handles": node_handles, "date_range": date_range.value}
 
         try:
-            response = self.session.post(f"{url}{query}?data_type={data_type}", json=payload, headers=headers)
+            response = self.session.post(f"{url}{query}", json=payload, headers=headers)
             logging.debug(response.text)
         except requests.exceptions.Timeout:
             logging.error("Timeout while waiting to retrieve data.")
@@ -253,7 +251,7 @@ class HTTPClient(object):
         return parsed["data"]
 
     # DONE+
-    def add_data2(self, data, timestamp, node_handle=None):
+    def add_data(self, data, timestamp, node_handle=None):
         """
         Add a single measurement set to the website.
 
@@ -302,6 +300,7 @@ def main():
     client = HTTPClient("dev", "Development Node")
 
     print(json.dumps(client.get_nodes(), indent=2))
+    print(json.dumps(client.get_data(DateRange.LAST_DAY, "rpi0"), indent=2))
     # sim_real_time(client)
 
 
