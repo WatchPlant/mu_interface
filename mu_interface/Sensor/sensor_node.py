@@ -2,7 +2,6 @@
 import time
 import logging
 import datetime
-import numpy as np
 
 from cybres_mu import Cybres_MU
 
@@ -80,7 +79,7 @@ class Sensor_Node:
             # Store the data to the csv file.
             if header is not None and header[1] == 1:
                 self.msg_count += 1
-                e = self.csv_object.write2csv([self.hostname] + payload.tolist())
+                e = self.csv_object.write2csv([self.hostname] + payload)
                 #  self.client.add_data(payload, self.additionalSensors)
                 if e is not None:
                     logging.error(
@@ -112,7 +111,7 @@ class Sensor_Node:
             messagetype = 1
             transfromed_data = self.transform_data(mu_line)
             # ID and MM are manually added
-            payload = np.append([self.mu_mm, self.mu_id], transfromed_data)
+            payload = [self.mu_mm, self.mu_id] + transfromed_data
 
         elif counter == 2:
             # Line is data message/id/measurement mode
@@ -123,7 +122,7 @@ class Sensor_Node:
             mu_id = int(messages[1].split(" ")[1])
             mu_mm = int(messages[2].split(" ")[1])
             # ID and mm get attached at the back of the data array
-            payload = np.append([mu_mm, mu_id], self.transform_data(messages[0]))
+            payload = [mu_mm, mu_id] + self.transform_data(messages[0])
 
         elif counter == 4:
             # Line is header
@@ -135,7 +134,7 @@ class Sensor_Node:
             self.mu_mm = int(lines[4].split()[1])
         else:
             logging.warning("Unknown data type: \n%s", mu_line)
-            return None, None
+            return None, []
 
         # Add data from additional external sensors
         if self.additionalSensors and messagetype in {1, 2}:
@@ -144,7 +143,7 @@ class Sensor_Node:
             # Important: len(self.sensors) == len(additionalValues), otherwise
             # it won't work
             additionalValues = []  # self.rgb.getData()#[]
-            payload = np.append(payload, additionalValues)
+            payload = payload + additionalValues
 
         header = (self.hostname, messagetype, bool(self.additionalSensors))
         return header, payload
@@ -162,7 +161,7 @@ class Sensor_Node:
         split_data = string_data.split(" ")
         timestamp = [int(time.mktime(datetime.datetime.now().timetuple()))]
         measurements = [int(elem) for elem in split_data[1:]]
-        return np.array(timestamp + measurements)
+        return timestamp + measurements
 
     def stop(self):
         """
