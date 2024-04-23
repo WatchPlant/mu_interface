@@ -22,7 +22,7 @@ class ColoredFormatter(logging.Formatter):
 
     def format(self, record):
         skip_line = False
-        if record.msg[0] == '\n':
+        if record.msg and record.msg[0] == '\n':
             skip_line = True
             record.msg = record.msg[1:]
         result = logging.Formatter.format(self, record)

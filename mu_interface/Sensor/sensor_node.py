@@ -2,6 +2,7 @@
 import time
 import logging
 import datetime
+from pathlib import Path
 
 from cybres_mu import Cybres_MU
 
@@ -26,6 +27,7 @@ class Sensor_Node:
         self.start_time = None
         self.mu_id = 0
         self.mu_mm = 0
+        self.mu_settings = {}
 
         # Add the names of the additional data columns to the list
         # e.g. ['ozon-conc', 'intensity-red', 'intensity-blue']
@@ -37,12 +39,23 @@ class Sensor_Node:
         Check the communication with the device by requesting a status message.
         """
         response = self.mu.get_initial_status()
-        logging.debug(response)
+        response_lines = response.split("\r\n")
+        logging.debug(response_lines)
+        try:
+            self.mu_settings['OS'], self.mu_settings['CPU_freq'], version = response_lines[2].split(', ')
+            self.mu_settings['FW_version'] = version.split(': ')[-1].rstrip('.')
+            self.mu_settings['dev_ID'] = response_lines[3].split(': ')[-1].rstrip('.')
+            self.mu_settings['meas_cfg'] = response_lines[4].split('=> ')[-1].rstrip('.')
+            # TODO: Fill the rest of the settings.
+        except (IndexError, ValueError):
+            logging.warn("Could not parse the initial status message.")
 
     def start(self):
         """
         Start the measurements. Continue to publish over MQTT and store to csv.
         """
+        
+        self.file_path = Path(f"{str(self.file_path)} ({self.mu_settings.get('dev_ID', 'ID NA')})")
 
         # Measure at set interval.
         response = self.mu.set_measurement_interval(self.measurment_interval)
@@ -105,6 +118,7 @@ class Sensor_Node:
         Returns:
             A tuple containing a header and payload for the MQTT message.
         """
+        logging.debug(mu_line)
         counter = mu_line.count("#")
         if counter == 0:
             # Line is pure data message
@@ -135,6 +149,7 @@ class Sensor_Node:
         else:
             logging.warning("Unknown data type: \n%s", mu_line)
             return None, []
+        
 
         # Add data from additional external sensors
         if self.additionalSensors and messagetype in {1, 2}:
