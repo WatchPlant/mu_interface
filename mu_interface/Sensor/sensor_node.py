@@ -146,7 +146,6 @@ class Sensor_Node:
                 # ID and MM are saved from the header
                 lines = [line.split() for line in mu_line.split("\r\n") if line.startswith("#")]
                 lines = {line[0]: line[1] for line in lines}
-                print(lines)
                 self.mu_id = int(lines['#id'])
                 self.mu_mm = int(lines['#ta'])
             else:
