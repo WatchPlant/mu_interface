@@ -119,37 +119,43 @@ class Sensor_Node:
             A tuple containing a header and payload for the MQTT message.
         """
         logging.debug(mu_line)
-        counter = mu_line.count("#")
-        if counter == 0:
-            # Line is pure data message
-            messagetype = 1
-            transfromed_data = self.transform_data(mu_line)
-            # ID and MM are manually added
-            payload = [self.mu_mm, self.mu_id] + transfromed_data
+        try:
+            counter = mu_line.count("#")
+            if counter == 0:
+                # Line is pure data message
+                messagetype = 1
+                transfromed_data = self.transform_data(mu_line)
+                # ID and MM are manually added
+                payload = [self.mu_mm, self.mu_id] + transfromed_data
 
-        elif counter == 2:
-            # Line is data message/id/measurement mode
-            # Every 100 measurements the MU sends also its own
-            # ID and measurement mode
-            messagetype = 2
-            messages = mu_line.split("#")
-            mu_id = int(messages[1].split(" ")[1])
-            mu_mm = int(messages[2].split(" ")[1])
-            # ID and mm get attached at the back of the data array
-            payload = [mu_mm, mu_id] + self.transform_data(messages[0])
+            elif counter == 2:
+                # Line is data message/id/measurement mode
+                # Every 100 measurements the MU sends also its own
+                # ID and measurement mode
+                messagetype = 2
+                messages = mu_line.split("#")
+                mu_id = int(messages[1].split(" ")[1])
+                mu_mm = int(messages[2].split(" ")[1])
+                # ID and mm get attached at the back of the data array
+                payload = [mu_mm, mu_id] + self.transform_data(messages[0])
 
-        elif counter == 4:
-            # Line is header
-            messagetype = 0
-            payload = mu_line
-            # ID and MM are saved from the header
-            lines = mu_line.split("\r\n")
-            self.mu_id = int(lines[3].split()[1])
-            self.mu_mm = int(lines[4].split()[1])
-        else:
-            logging.warning("Unknown data type: \n%s", mu_line)
+            elif counter == 4:
+                # Line is header
+                messagetype = 0
+                payload = mu_line
+                # ID and MM are saved from the header
+                lines = [line.split() for line in mu_line.split("\r\n") if line.startswith("#")]
+                lines = {line[0]: line[1] for line in lines}
+                print(lines)
+                self.mu_id = int(lines['#id'])
+                self.mu_mm = int(lines['#ta'])
+            else:
+                logging.warning("Unknown data type: \n%s", mu_line)
+                return None, []
+        except (ValueError, IndexError, KeyError) as e:
+            logging.error("Error while parsing the data: %s", e)
+            logging.error("Data: %s", mu_line)
             return None, []
-        
 
         # Add data from additional external sensors
         if self.additionalSensors and messagetype in {1, 2}:
