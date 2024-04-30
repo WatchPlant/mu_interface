@@ -27,6 +27,8 @@ if __name__ == "__main__":
         help="Directory where measurement data is saved.")
     parser.add_argument('--multi', action='store_true',
         help="Flag specifying that multiple MU sensors are connected to one sensor node.")
+    parser.add_argument('--debug', action='store_true',
+        help="Flag to enable debug messages.")
     args = parser.parse_args()
 
     port_id = args.port.split("/")[-1]
@@ -49,7 +51,7 @@ if __name__ == "__main__":
 
     file_prefix = f"{experiment_name}_{port_id}"
 
-    setup_logger(hostname, level=logging.INFO)
+    setup_logger(hostname, level=logging.DEBUG if args.debug else logging.INFO)
     logging.info("Starting sensor node.")
 
     baud = args.baud
