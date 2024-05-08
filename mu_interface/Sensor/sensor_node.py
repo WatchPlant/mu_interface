@@ -2,6 +2,7 @@
 import time
 import logging
 import datetime
+import tempfile
 from pathlib import Path
 
 from cybres_mu import Cybres_MU
@@ -28,6 +29,10 @@ class Sensor_Node:
         self.mu_id = 0
         self.mu_mm = 0
         self.mu_settings = {}
+        
+        # TODO: Refactor and remove this dependency
+        self.status_dir = Path("/home/rock/OrangeBox/status/measuring")
+        self.status_dir.mkdir(parents=True, exist_ok=True)
 
         # Add the names of the additional data columns to the list
         # e.g. ['ozon-conc', 'intensity-red', 'intensity-blue']
@@ -71,42 +76,46 @@ class Sensor_Node:
         file_name = f"{self.file_prefix}_{self.start_time.strftime(TimeFormat.file)}.csv"
         self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
         last_time = datetime.datetime.now()
+        
+        # Create temporary file to signal that measurement is active.
+        prefix = f"{self.file_prefix.split('_')[-1]} ({self.mu_settings.get('dev_ID', 'ID NA')})_"
 
-        while True:
-            # Create a new csv file after the specified interval.
-            current_time = datetime.datetime.now()
-            if current_time.hour in {0, 12} and current_time.hour != last_time.hour:
-                logging.info("Creating a new csv file.")
-                file_name = f"{self.file_prefix}_{current_time.strftime(TimeFormat.file)}.csv"
-                self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
-                last_time = current_time
+        with tempfile.NamedTemporaryFile(prefix=prefix, dir=self.status_dir):
+            while True:
+                # Create a new csv file after the specified interval.
+                current_time = datetime.datetime.now()
+                if current_time.hour in {0, 12} and current_time.hour != last_time.hour:
+                    logging.info("Creating a new csv file.")
+                    file_name = f"{self.file_prefix}_{current_time.strftime(TimeFormat.file)}.csv"
+                    self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
+                    last_time = current_time
 
-            # Get the next data set.
-            next_line = self.mu.get_next()
-            header, payload = self.classify_message(next_line)
+                # Get the next data set.
+                next_line = self.mu.get_next()
+                header, payload = self.classify_message(next_line)
 
-            # Send data to Edge device via ZMQ if it's valid.
-            if header is not None:
-                self.pub.publish(header, self.additionalSensors, payload)
+                # Send data to Edge device via ZMQ if it's valid.
+                if header is not None:
+                    self.pub.publish(header, self.additionalSensors, payload)
 
-            # Store the data to the csv file.
-            if header is not None and header[1] == 1:
-                self.msg_count += 1
-                e = self.csv_object.write2csv([self.hostname] + payload)
-                #  self.client.add_data(payload, self.additionalSensors)
-                if e is not None:
-                    logging.error(
-                        "Writing to csv file failed with error:\n%s\n\n\
-                        Continuing because this is not a fatal error.",
-                        e,
-                    )
+                # Store the data to the csv file.
+                if header is not None and header[1] == 1:
+                    self.msg_count += 1
+                    e = self.csv_object.write2csv([self.hostname] + payload)
+                    #  self.client.add_data(payload, self.additionalSensors)
+                    if e is not None:
+                        logging.error(
+                            "Writing to csv file failed with error:\n%s\n\n\
+                            Continuing because this is not a fatal error.",
+                            e,
+                        )
 
-            # Print out a status message roughly every 30 mins
-            if self.msg_count % 180 == 0 and self.msg_count > 0:
-                td = datetime.datetime.now() - self.start_time
-                hms = (td.seconds // 3600, td.seconds // 60 % 60, td.seconds % 60)
-                duration = f"{td.days} days, {hms[0] :02}:{hms[1] :02}:{hms[2] :02} [HH:MM:SS]"
-                logging.info("I am measuring for %s and I collected %d datapoints.", duration, self.msg_count)
+                # Print out a status message roughly every 30 mins
+                if self.msg_count % 180 == 0 and self.msg_count > 0:
+                    td = datetime.datetime.now() - self.start_time
+                    hms = (td.seconds // 3600, td.seconds // 60 % 60, td.seconds % 60)
+                    duration = f"{td.days} days, {hms[0] :02}:{hms[1] :02}:{hms[2] :02} [HH:MM:SS]"
+                    logging.info("I am measuring for %s and I collected %d datapoints.", duration, self.msg_count)
 
     def classify_message(self, mu_line):
         """
