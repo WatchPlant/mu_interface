@@ -81,6 +81,12 @@ class Sensor_Node:
         
         # Create temporary file to signal that measurement is active.
         prefix = f"{self.file_prefix.split('_')[-1]} ({self.mu_settings.get('dev_ID', 'ID NA')})_"
+        
+        # Measure the average time between measurements.
+        time_length = 100
+        loop = {"start": time.time(), "duration": [0] * time_length}
+        processing = {"start": time.time(), "duration": [0] * time_length}
+        time_index = 0
 
         with tempfile.NamedTemporaryFile(prefix=prefix, dir=self.status_dir):
             while True:
@@ -92,8 +98,11 @@ class Sensor_Node:
                     self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
                     last_time = current_time
 
-                # Get the next data set.
+                # Get the next data line.
                 next_line = self.mu.get_next()
+                loop["duration"][time_index] = time.time() - loop["start"]
+                loop["start"] = time.time()
+                processing["start"] = time.time()
                 header, payload = self.classify_message(next_line)
 
                 # Send data to Edge device via ZMQ if it's valid.
@@ -116,6 +125,14 @@ class Sensor_Node:
                             e,
                         )
                         self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="error")
+                    
+                # Record the time taken to process the data.
+                processing["duration"][time_index] = time.time() - processing["start"]
+                time_index += 1
+                if time_index == time_length:
+                    logging.info("Average loop time: %f", sum(loop["duration"]) / time_length)
+                    logging.info("Average processing time: %f", sum(processing["duration"]) / time_length)
+                    time_index = 0
 
                 # Print out a status message roughly every 30 mins
                 if self.msg_count % 180 == 0 and self.msg_count > 0:
