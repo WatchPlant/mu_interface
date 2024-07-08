@@ -39,6 +39,11 @@ class data2csv:
         "differential_potential_CH2": 3,
         "transpiration": 2,
     }
+    
+    limits = {
+        "temp_external": (0, 60),
+        "humidity_external": (0, 100),
+    }
 
     def __init__(self, file_path, file_name, additionalSensors, config_file=None):
         self.file_path = Path(file_path)
@@ -87,24 +92,24 @@ class data2csv:
                 os.chown(p, int(uid), int(gid))
 
     def write2csv(self, data):
-        try:
-            if self.additionalSensors == "energy":
-                timestamp = datetime.fromtimestamp(data[0])
-                filtered_data = data[1:]
-            else:
-                timestamp = datetime.fromtimestamp(data[3]).strftime(TimeFormat.data)
-                filtered_data = [data[i] for i in self.filter]
-                # df = DataFrame(data=[filtered_data], columns=self.header)
-                # filtered_data = data2csv.transform_data(df)
-                filtered_data = data2csv.transform_data(filtered_data, self.header)
+        wrong_values = ""
+        if self.additionalSensors == "energy":
+            timestamp = datetime.fromtimestamp(data[0])
+            filtered_data = data[1:]
+        else:
+            timestamp = datetime.fromtimestamp(data[3]).strftime(TimeFormat.data)
+            filtered_data = [data[i] for i in self.filter]
+            # df = DataFrame(data=[filtered_data], columns=self.header)
+            # filtered_data = data2csv.transform_data(df)
+            filtered_data, wrong_values = data2csv.transform_data(filtered_data, self.header)
 
-            data4csv = [timestamp] + filtered_data
-            with open(self.file_path / self.file_name, "a", newline="") as csvfile:
-                csvwriter = csv.writer(csvfile)
-                csvwriter.writerow(data4csv)
+        data4csv = [timestamp] + filtered_data
+        with open(self.file_path / self.file_name, "a", newline="") as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(data4csv)
+            
+        return wrong_values
 
-        except Exception as e:
-            return e
 
     # @staticmethod
     # def transform_data(df):
@@ -116,10 +121,15 @@ class data2csv:
 
     @staticmethod
     def transform_data(data, header):
+        wrong_values = ""
         df = {header[i]: data[i] for i in range(len(data))}
         for i in range(len(data)):
             key = header[i]
             if key in data2csv.transformations:
                 data[i] = round(data2csv.transformations[key](df, key), data2csv.rounding.get(key, 2))
+                
+            if key in data2csv.limits:
+                if data[i] < data2csv.limits[key][0] or data[i] > data2csv.limits[key][1]:
+                    wrong_values += f"Unexpected value for {key}: {data[i]}\n"
 
-        return data
+        return data, wrong_values

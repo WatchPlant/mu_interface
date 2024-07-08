@@ -9,6 +9,7 @@ from cybres_mu import Cybres_MU
 
 # from Additional_Sensors.rgbtcs34725 import RGB_TCS34725
 from fake_zmq_publisher import ZMQ_Publisher
+from throttled_zmq_publisher import ZMQ_Publisher_Throttled
 from mu_interface.Utilities.data2csv import data2csv
 from mu_interface.Utilities.utils import TimeFormat
 # from mu_interface.Utilities.HTTP_client import HTTPClient
@@ -18,6 +19,7 @@ class Sensor_Node:
     def __init__(self, hostname, port, baudrate, meas_interval, address, file_path, file_prefix):
         self.mu = Cybres_MU(port, baudrate)
         self.pub = ZMQ_Publisher(address)
+        self.notify_pub = ZMQ_Publisher_Throttled()
         # self.client = HTTPClient(hostname, hostname)
         self.hostname = hostname
         self.measurment_interval = meas_interval
@@ -101,14 +103,19 @@ class Sensor_Node:
                 # Store the data to the csv file.
                 if header is not None and header[1] == 1:
                     self.msg_count += 1
-                    e = self.csv_object.write2csv([self.hostname] + payload)
-                    #  self.client.add_data(payload, self.additionalSensors)
-                    if e is not None:
+                    try:
+                        warnings = self.csv_object.write2csv([self.hostname] + payload)
+                        #  self.client.add_data(payload, self.additionalSensors)
+                        if warnings:
+                            self.notify_pub.publish(f"[Warning]: {warnings}", topic="value")
+                            
+                    except Exception as e:
                         logging.error(
                             "Writing to csv file failed with error:\n%s\n\n\
                             Continuing because this is not a fatal error.",
                             e,
                         )
+                        self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="error")
 
                 # Print out a status message roughly every 30 mins
                 if self.msg_count % 180 == 0 and self.msg_count > 0:

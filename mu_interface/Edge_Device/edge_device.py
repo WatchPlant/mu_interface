@@ -105,8 +105,9 @@ class Edge_Device():
 
 
         # Store the data to the csv file.
-        e = self.csv_objects[sender].write2csv(data)
-        if e is not None:
+        try:
+            self.csv_objects[sender].write2csv(data)
+        except Exception as e:
             logging.error("Writing to csv file failed with error:\n%s\n\n\
                 Continuing because this is not a fatal error.", e)
 
