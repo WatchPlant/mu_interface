@@ -18,7 +18,7 @@ class data2csv:
         "mag_Z": (lambda d, c: d[c] / 1000 * 100),                                        # Micro Tesla
         "light_external": (lambda d, c: d[c] / 799.4 - 0.75056),                          # Lux
         "humidity_external": (lambda d, c: (d[c] * 3 / 4200000 - 0.1515) \
-                                / (0.006707256 - 0.0000137376 * d["temp_external"])),     # Percent
+                                / (0.006707256 - 0.0000137376 * d["temp_external"] / 10000)),     # Percent
         "air_pressure": (lambda d, c: d[c] / 100),                                        # Mili Bars
         "differential_potential_CH1": (lambda d, c: (d[c] - 512000) / 1000),              # Mili Volts
         "differential_potential_CH2": (lambda d, c: (d[c] - 512000) / 1000),              # Mili Volts
