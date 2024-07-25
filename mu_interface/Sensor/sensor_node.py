@@ -21,10 +21,11 @@ class Sensor_Node:
         self.pub = ZMQ_Publisher(address)
         self.notify_pub = ZMQ_Publisher_Throttled()
         # self.client = HTTPClient(hostname, hostname)
-        self.hostname = hostname
+        self.hostname = hostname  # e.g. rockpi, OB-ZAG-0
         self.measurment_interval = meas_interval
-        self.file_path = file_path
-        self.file_prefix = file_prefix
+        self.file_path = file_path  # e.g. /home/rockpi/measurements/OB-ZAG-0_2/MU/CYB1
+        self.file_prefix = file_prefix  # e.g. rockpi_1_ACM0, OB-ZAG-0_2_CYB1
+        self.device = file_prefix.split("_")[-1]  # e.g. ACM0, CYB1
         self.csv_object = None
         self.msg_count = 0
         self.start_time = None
@@ -113,10 +114,11 @@ class Sensor_Node:
                 if header is not None and header[1] == 1:
                     self.msg_count += 1
                     try:
-                        warnings = self.csv_object.write2csv([self.hostname] + payload)
+                        wrong_values = self.csv_object.write2csv([self.hostname] + payload)
                         #  self.client.add_data(payload, self.additionalSensors)
-                        if warnings:
-                            self.notify_pub.publish(f"[Warning]: {warnings}", topic="value")
+                        if wrong_values:
+                            warning = f"[Warning] Unexpected values for:\n{self.device}\n{wrong_values}"
+                            self.notify_pub.publish(warning, topic="value")
                             
                     except Exception as e:
                         logging.error(

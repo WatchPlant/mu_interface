@@ -34,22 +34,22 @@ if __name__ == "__main__":
     port_id = args.port.split("/")[-1]
 
     if args.addr == "localhost":
-        hostname = port_id
+        hostname = port_id  # e.g. ACM0, CYB1
     elif args.multi:
-        hostname = f"{socket.gethostname()}_" + port_id
+        hostname = f"{socket.gethostname()}_" + port_id  # e.g. rockpi_ACM0, OB-ZAG-0_CYB1
     else:
-        hostname = socket.gethostname()
+        hostname = socket.gethostname()  # e.g. rockpi, OB-ZAG-0
 
     with open(Path.home() / "OrangeBox/status/experiment_number.txt", "r") as f:
         experiment_number = int(f.read())
-    experiment_name = f"{socket.gethostname()}_{experiment_number}"
+    experiment_name = f"{socket.gethostname()}_{experiment_number}"  # e.g. rockpi_1, OB-ZAG-0_2
 
     csv_dir = Path(args.dir)
-    csv_dir = csv_dir / experiment_name / "MU"
+    csv_dir = csv_dir / experiment_name / "MU"  # e.g. /home/rockpi/measurements/OB-ZAG-0_2/MU
     if args.multi:
-        csv_dir /= port_id
+        csv_dir /= port_id  # e.g. /home/rockpi/measurements/OB-ZAG-0_2/MU/CYB1
 
-    file_prefix = f"{experiment_name}_{port_id}"
+    file_prefix = f"{experiment_name}_{port_id}"  # e.g. rockpi_1_ACM0, OB-ZAG-0_2_CYB1
 
     setup_logger(hostname, level=logging.DEBUG if args.debug else logging.INFO)
     logging.info("Starting sensor node.")

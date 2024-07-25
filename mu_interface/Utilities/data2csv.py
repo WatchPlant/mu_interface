@@ -121,7 +121,7 @@ class data2csv:
 
     @staticmethod
     def transform_data(data, header):
-        wrong_values = ""
+        wrong_values = []
         df = {header[i]: data[i] for i in range(len(data))}
         for i in range(len(data)):
             key = header[i]
@@ -130,6 +130,6 @@ class data2csv:
                 
             if key in data2csv.limits:
                 if data[i] < data2csv.limits[key][0] or data[i] > data2csv.limits[key][1]:
-                    wrong_values += f"Unexpected value for {key}: {data[i]}\n"
+                    wrong_values.append(f"* {key} = {data[i]}")
 
-        return data, wrong_values
+        return data, "\n".join(wrong_values)
