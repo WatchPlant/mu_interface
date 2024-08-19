@@ -13,6 +13,7 @@ class WatchdogCounter:
         self.limit = 0
         self.update_limit(timeout_value)
         self.last_valid = None
+        self.last_report = 0
 
     def check(self, data, target):
         if self.last_valid is None:
@@ -26,9 +27,13 @@ class WatchdogCounter:
         relative_delay = round(delay / self.timeout_value, 1)
 
         if delay >= self.limit:
-            return False, relative_delay
+            do_report = False
+            if int(relative_delay) != self.last_report:
+                do_report = True
+                self.last_report = int(relative_delay)
+            return False, relative_delay, do_report
 
-        return True, relative_delay
+        return True, relative_delay, False
 
     def update_limit(self, timeout_value):
         self.timeout_value = timeout_value
@@ -81,13 +86,13 @@ class Cybres_MU:
             char = self.ser.read(1).decode("ascii")
 
             # Check that we are receiving something.
-            ok, delay = self.data_watchdog.check(char, r".+")
-            if not ok:
+            ok, delay, warn = self.data_watchdog.check(char, r".+")
+            if warn:
                 logging.error(
                     f"Nothing received from Blue box {delay} times longer than expected."
                 )
-            ok, delay = self.frame_watchdog.check(char, r"A")
-            if not ok:
+            ok, delay, warn = self.frame_watchdog.check(char, r"A")
+            if warn:
                 logging.error(
                     f"Start char not found {delay} times longer than expected."
                 )
@@ -104,8 +109,8 @@ class Cybres_MU:
             self.find_start()
         while not end_found:
             next_char = self.ser.read(1).decode("ascii")
-            ok, delay = self.frame_watchdog.check(next_char, r"Z")
-            if not ok:
+            ok, delay, warn = self.frame_watchdog.check(next_char, r"Z")
+            if warn:
                 logging.error(
                     f"End char not found {delay} times longer than expected.",
                 )
