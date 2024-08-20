@@ -47,6 +47,13 @@ class Sensor_Node:
         """
         Check the communication with the device by requesting a status message.
         """
+        response = self.mu.get_system_messages()
+        logging.debug(f"Checking system messages:\n{response}")
+
+    def get_config(self, output=False):
+        """
+        Get the configuration of the MU device.
+        """
         response = self.mu.get_initial_status()
         response_lines = response.split("\r\n")
         logging.debug(f"Initial status message:\n{response}")
@@ -56,7 +63,8 @@ class Sensor_Node:
             self.mu_config['OS version'], self.mu_config['CPU freq'], version = response_lines[2].split(', ')
             self.mu_config['FW version'] = version.split(': ')[-1].rstrip('.')
             self.mu_config['meas. config'] = response_lines[4].split('=> ')[-1].rstrip('.')
-            logging.info(f"Blue box configuration:{json.dumps(self.mu_config, indent=4)[1:-1]}")
+            if output:
+                logging.info(f"Blue box configuration:{json.dumps(self.mu_config, indent=4)[1:-1]}")
             logging.debug(json.dumps(mu_config_raw, indent=4))
         except (IndexError, ValueError) as e:
             logging.warn(f"Could not parse the initial status message.\n{e}")
@@ -89,7 +97,9 @@ class Sensor_Node:
         self.file_path = Path(f"{str(self.file_path)} ({self.mu_config.get('ID', 'ID NA')})")
 
         # Configure the MU device.
+        self.get_config()
         self.configure()
+        self.get_config(output=True)
 
         # Start measurements.
         self.mu.start_measurement()

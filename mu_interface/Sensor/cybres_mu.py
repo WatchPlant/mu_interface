@@ -165,6 +165,10 @@ class Cybres_MU:
         self.ser.write(b",ss*")
         return self._get_response(sleep_time=0.5)
 
+    def get_system_messages(self):
+        self.ser.write(b',sy*')
+        return self._get_response(sleep_time=0.5)
+
     def restart(self):
         self.ser.write(b",sr*")
 
