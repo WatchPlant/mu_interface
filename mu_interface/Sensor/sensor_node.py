@@ -167,8 +167,8 @@ class Sensor_Node:
                 processing["duration"][time_index] = time.time() - processing["start"]
                 time_index += 1
                 if time_index == time_length:
-                    logging.info("Average loop time: %f", sum(loop["duration"]) / time_length)
-                    logging.info("Average processing time: %f", sum(processing["duration"]) / time_length)
+                    logging.debug("Average loop time: %f", sum(loop["duration"]) / time_length)
+                    logging.debug("Average processing time: %f", sum(processing["duration"]) / time_length)
                     time_index = 0
 
                 # Print out a status message roughly every 30 mins
