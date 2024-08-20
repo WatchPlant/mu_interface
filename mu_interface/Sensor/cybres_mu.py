@@ -37,8 +37,12 @@ class WatchdogCounter:
         return True, relative_delay, False
 
     def update_limit(self, timeout_value):
+        # When measurment interval is set to 1 second, actual interval is often
+        # longer (2-3 seconds), so watchdog constantly triggers. This is an
+        # arbitraraliy chosen value to make it more tolerant.
+        timeout_multiplier = max(5, self.timeout_multiplier) if timeout_value < 1.5 else self.timeout_multiplier
         self.timeout_value = timeout_value
-        self.limit = self.timeout_multiplier * timeout_value
+        self.limit = timeout_multiplier * timeout_value
 
 
 class Cybres_MU:
@@ -186,7 +190,7 @@ def test_mu():
 
 
 def test_watchdog():
-    watchdog = WatchdogCounter(5, 2)
+    watchdog = WatchdogCounter(3, 1)
     while True:
         c = input("> ")
         print(watchdog.check(c, r".+"))
