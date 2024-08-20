@@ -15,6 +15,7 @@ COLORS = {
     'ERROR': "\033[31m",
 }
 
+log_DBGX = 15
 
 class ColoredFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None):
@@ -47,3 +48,15 @@ def setup_logger(name, level=logging.INFO):
     rootLogger.addHandler(consoleHandler)
 
     rootLogger.setLevel(level)
+
+
+if __name__ == "__main__":
+    logging.addLevelName(log_DBGX, "DEBUG")
+    
+    setup_logger("test", log_DBGX)
+    logging.debug("test")
+    logging.info("test")
+    logging.warning("test")
+    logging.error("test")
+    logging.critical("test")
+    logging.log(log_DBGX, "test")
