@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import time
 import logging
 import datetime
@@ -31,10 +32,10 @@ class Sensor_Node:
         self.start_time = None
         self.mu_id = 0
         self.mu_mm = 0
-        self.mu_settings = {}
-        
+        self.mu_config = {}
+
         # TODO: Refactor and remove this dependency
-        self.status_dir = Path("/home/rock/OrangeBox/status/measuring")
+        self.status_dir = Path.home() / "OrangeBox/status/measuring"
         self.status_dir.mkdir(parents=True, exist_ok=True)
 
         # Add the names of the additional data columns to the list
@@ -48,26 +49,49 @@ class Sensor_Node:
         """
         response = self.mu.get_initial_status()
         response_lines = response.split("\r\n")
-        logging.debug(response_lines)
+        logging.debug(f"Initial status message:\n{response}")
+
         try:
-            self.mu_settings['OS'], self.mu_settings['CPU_freq'], version = response_lines[2].split(', ')
-            self.mu_settings['FW_version'] = version.split(': ')[-1].rstrip('.')
-            self.mu_settings['dev_ID'] = response_lines[3].split(': ')[-1].rstrip('.')
-            self.mu_settings['meas_cfg'] = response_lines[4].split('=> ')[-1].rstrip('.')
-            # TODO: Fill the rest of the settings.
-        except (IndexError, ValueError):
-            logging.warn("Could not parse the initial status message.")
+            self.mu_config, mu_config_raw = Cybres_MU.parse_status_message(response_lines[1])
+            self.mu_config['OS version'], self.mu_config['CPU freq'], version = response_lines[2].split(', ')
+            self.mu_config['FW version'] = version.split(': ')[-1].rstrip('.')
+            self.mu_config['meas. config'] = response_lines[4].split('=> ')[-1].rstrip('.')
+            logging.info(f"Blue box configuration:{json.dumps(self.mu_config, indent=4)[1:-1]}")
+            logging.debug(json.dumps(mu_config_raw, indent=4))
+        except (IndexError, ValueError) as e:
+            logging.warn(f"Could not parse the initial status message.\n{e}")
+
+    def configure(self):
+        """
+        Configure the MU device.
+        """
+        if self.mu_config.get("measurement_mode") != Cybres_MU.MeasurementMode.CONT_MEAS_FIXED.value:
+            response = self.mu.set_measurement_mode(Cybres_MU.MeasurementMode.CONT_MEAS_FIXED)
+            logging.debug(response)
+
+        if self.mu_config.get("waveform_range") != Cybres_MU.WaveformRange.RANGE_1V.value:
+            response = self.mu.set_waveform_range(Cybres_MU.WaveformRange.RANGE_1V)
+            logging.debug(response)
+
+        if self.mu_config.get("waveform_amplitude") != 120:
+            response = self.mu.set_waveform_amplitude(120)
+            logging.debug(response)
+
+        if self.mu_config.get("measurement_interval") != self.measurment_interval:
+            response = self.mu.set_measurement_interval(self.measurment_interval)
+            logging.debug(response)
 
     def start(self):
         """
         Start the measurements. Continue to publish over MQTT and store to csv.
         """
-        
-        self.file_path = Path(f"{str(self.file_path)} ({self.mu_settings.get('dev_ID', 'ID NA')})")
 
-        # Measure at set interval.
-        response = self.mu.set_measurement_interval(self.measurment_interval)
-        logging.debug(response)
+        self.file_path = Path(f"{str(self.file_path)} ({self.mu_config.get('ID', 'ID NA')})")
+
+        # Configure the MU device.
+        self.configure()
+
+        # Start measurements.
         self.mu.start_measurement()
 
         # Record the starting time and notify the user.
@@ -79,16 +103,17 @@ class Sensor_Node:
         file_name = f"{self.file_prefix}_{self.start_time.strftime(TimeFormat.file)}.csv"
         self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
         last_time = datetime.datetime.now()
-        
+
         # Create temporary file to signal that measurement is active.
-        prefix = f"{self.file_prefix.split('_')[-1]} ({self.mu_settings.get('dev_ID', 'ID NA')})_"
-        
+        prefix = f"{self.file_prefix.split('_')[-1]} ({self.mu_config.get('ID', 'ID NA')})_"
+
         # Measure the average time between measurements.
         time_length = 100
         loop = {"start": time.time(), "duration": [0] * time_length}
         processing = {"start": time.time(), "duration": [0] * time_length}
         time_index = 0
 
+        # FIXME: Tempfile does not get deleted on SIGKILL
         with tempfile.NamedTemporaryFile(prefix=prefix, dir=self.status_dir):
             while True:
                 # Create a new csv file after the specified interval.
@@ -119,7 +144,7 @@ class Sensor_Node:
                         if wrong_values:
                             warning = f"[Warning] Unexpected values for:\n{self.device}\n{wrong_values}"
                             self.notify_pub.publish(warning, topic="value")
-                            
+
                     except Exception as e:
                         logging.error(
                             "Writing to csv file failed with error:\n%s\n\n\
@@ -127,7 +152,7 @@ class Sensor_Node:
                             e,
                         )
                         self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="error")
-                    
+
                 # Record the time taken to process the data.
                 processing["duration"][time_index] = time.time() - processing["start"]
                 time_index += 1

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import enum
 import logging
 import re
 import time
@@ -46,6 +47,35 @@ class WatchdogCounter:
 
 
 class Cybres_MU:
+    config_dict = {
+        "D": "ID",
+        "P": "measurement_interval",
+        "E": "waveform_range",
+        "N": "waveform_amplitude",
+        "!": "measurement_mode",
+        "$": "tia_amplification",
+    }
+
+    class MeasurementMode(enum.Enum):
+        EIS_OFF = 0
+        IMPEDANCE_SPECTROSCOPE = 1
+        SIGNAL_SCOPE = 2
+        CONT_MEAS_FIXED = 3
+        CONT_MEAS_VARIABLE = 4
+        FRP = 5
+        CONT_FRP = 6
+
+    class WaveformRange(enum.Enum):
+        RANGE_1V = 1
+        RANGE_01V = 2
+        RANGE_001V = 3
+
+    class TIAAmplification(enum.Enum):
+        GAIN_50 = 0
+        GAIN_500 = 1
+        GAIN_5000 = 2
+        GAIN_50000 = 3
+
     def __init__(self, port_name, baudrate=460800):
         self.timeout = 1
 
@@ -156,6 +186,21 @@ class Cybres_MU:
         self.ser.write(set_interval.encode())
         return self._get_response(sleep_time=0.5)
 
+    def set_waveform_amplitude(self, amplitude):
+        if amplitude < 1 or amplitude > 127:
+            raise ValueError(f"Impedance Waveform Amplitude must be 1-127. Current: {amplitude}")
+
+        self.ser.write(f",ya{amplitude:03}*".encode())
+        return self._get_response(sleep_time=0.5)
+
+    def set_waveform_range(self, range: WaveformRange):
+        self.ser.write(f",yy{range.value}*".encode())
+        return self._get_response(sleep_time=0.5)
+
+    def set_measurement_mode(self, mode: MeasurementMode):
+        self.ser.write(f",yn{mode.value}*".encode())
+        return self._get_response(sleep_time=0.5)
+
     def to_flash(self):
         self.ser.write(b"sf2*")
 
@@ -182,11 +227,40 @@ class Cybres_MU:
             response += self.ser.read(1).decode("ascii")
         return response
 
+    @staticmethod
+    def parse_status_message(msg):
+        if msg[0] != "I" or msg[-1] != "Y":
+            raise ValueError("Invalid status message format.")
+        msg = msg[1:-1]
+
+        # Initialize variables
+        raw = {}
+        processed = {}
+        key = None
+        value = ""
+
+        for char in msg:
+            if char.isdigit():
+                value += char  # If the character is a digit, add it to the value
+            else:
+                if key is not None and value:
+                    raw[key] = int(value)  # Assign the accumulated value to the previous key
+                key = char  # The current character is the new key
+                value = ""  # Reset the value accumulator
+
+        # Add the last key-value pair
+        if key is not None and value:
+            raw[key] = int(value)
+
+        for key, value in Cybres_MU.config_dict.items():
+            processed[value] = raw[key]
+
+        return processed, raw
+
 
 def test_mu():
     mu = Cybres_MU("/dev/ttyACM0")
     mu.set_measurement_interval(1000)
-    mu.to_flash()
     mu.start_measurement()
     time.sleep(180)
     print("Now reading")
@@ -201,4 +275,5 @@ def test_watchdog():
 
 
 if __name__ == "__main__":
-    test_watchdog()
+    mode = Cybres_MU.MeasurementMode.CONT_MEAS_FIXED
+    print(f",yn{mode.value:}*".encode())
