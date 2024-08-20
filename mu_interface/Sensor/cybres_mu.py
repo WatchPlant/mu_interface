@@ -142,6 +142,10 @@ class Cybres_MU:
         self.ser.write(b",ms*")
 
     def stop_measurement(self):
+        time.sleep(1)
+        self._get_response(sleep_time=0.5)
+        self.ser.reset_input_buffer()
+        self.ser.reset_output_buffer()
         self.ser.write(b",mp*")
 
     def set_measurement_interval(self, interval):
