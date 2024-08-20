@@ -170,13 +170,13 @@ class Cybres_MU:
         return self._get_response(sleep_time=0.5)
 
     def restart(self):
-        self.ser.write(b",sr*")
-
-    def start_measurement(self):
         time.sleep(1)
         self._get_response(sleep_time=0.5)
         self.ser.reset_input_buffer()
         self.ser.reset_output_buffer()
+        self.ser.write(b",sr*")
+
+    def start_measurement(self):
         self.ser.write(b",ms*")
 
     def stop_measurement(self):
