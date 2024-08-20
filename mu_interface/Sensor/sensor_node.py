@@ -94,12 +94,12 @@ class Sensor_Node:
         Start the measurements. Continue to publish over MQTT and store to csv.
         """
 
-        self.file_path = Path(f"{str(self.file_path)} ({self.mu_config.get('ID', 'ID NA')})")
-
         # Configure the MU device.
         self.get_config()
         self.configure()
         self.get_config(output=True)
+
+        self.file_path = Path(f"{str(self.file_path)} ({self.mu_config.get('ID', 'ID NA')})")
 
         # Start measurements.
         self.mu.start_measurement()
