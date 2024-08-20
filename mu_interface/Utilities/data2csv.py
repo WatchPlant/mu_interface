@@ -17,8 +17,7 @@ class data2csv:
         "mag_Y": (lambda d, c: d[c] / 1000 * 100),                                        # Micro Tesla
         "mag_Z": (lambda d, c: d[c] / 1000 * 100),                                        # Micro Tesla
         "light_external": (lambda d, c: d[c] / 799.4 - 0.75056),                          # Lux
-        "humidity_external": (lambda d, c: (d[c] * 3 / 4200000 - 0.1515) \
-                                / (0.006707256 - 0.0000137376 * d["temp_external"] / 10000)),     # Percent
+        "humidity_external": (lambda d, c: (d[c] * 3 / 4200000 - 0.1515) / 0.00636),      # Percent (Honeywell HIH-5031)
         "air_pressure": (lambda d, c: d[c] / 100),                                        # Mili Bars
         "differential_potential_CH1": (lambda d, c: (d[c] - 512000) / 1000),              # Mili Volts
         "differential_potential_CH2": (lambda d, c: (d[c] - 512000) / 1000),              # Mili Volts
@@ -39,7 +38,7 @@ class data2csv:
         "differential_potential_CH2": 3,
         "transpiration": 2,
     }
-    
+
     limits = {
         "temp_external": (0, 60),
         "humidity_external": (0, 100),
@@ -107,7 +106,7 @@ class data2csv:
         with open(self.file_path / self.file_name, "a", newline="") as csvfile:
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(data4csv)
-            
+
         return wrong_values
 
 
@@ -127,7 +126,7 @@ class data2csv:
             key = header[i]
             if key in data2csv.transformations:
                 data[i] = round(data2csv.transformations[key](df, key), data2csv.rounding.get(key, 2))
-                
+
             if key in data2csv.limits:
                 if data[i] < data2csv.limits[key][0] or data[i] > data2csv.limits[key][1]:
                     wrong_values.append(f"* {key} = {data[i]}")
