@@ -16,6 +16,7 @@ class WatchdogCounter:
         self.last_report = 0
 
     def check(self, data, target):
+
         if self.last_valid is None:
             self.last_valid = time.time()
 
@@ -81,9 +82,11 @@ class Cybres_MU:
     # Finds the start of the next data set
     def find_start(self):
         start_found = False
+        debug_buffer = ""
         while not start_found:
             # If serial buffer is empty, read will return an empty string after timeout.
             char = self.ser.read(1).decode("ascii")
+            debug_buffer += char
 
             # Check that we are receiving something.
             ok, delay, warn = self.data_watchdog.check(char, r".+")
@@ -96,9 +99,11 @@ class Cybres_MU:
                 logging.error(
                     f"Start char not found {delay} times longer than expected."
                 )
+                logging.debug(f"Current buffer state {debug_buffer}")
 
             if char == "A":
                 start_found = True
+                debug_buffer = ""
         self.start_char = char
 
     # Returns the next complete data set
