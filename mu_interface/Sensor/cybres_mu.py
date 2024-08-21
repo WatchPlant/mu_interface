@@ -47,15 +47,6 @@ class WatchdogCounter:
 
 
 class Cybres_MU:
-    config_dict = {
-        "D": "ID",
-        "P": "measurement_interval",
-        "E": "waveform_range",
-        "N": "waveform_amplitude",
-        "!": "measurement_mode",
-        "$": "tia_amplification",
-    }
-
     class MeasurementMode(enum.Enum):
         EIS_OFF = 0
         IMPEDANCE_SPECTROSCOPE = 1
@@ -75,6 +66,17 @@ class Cybres_MU:
         GAIN_500 = 1
         GAIN_5000 = 2
         GAIN_50000 = 3
+        GAIN_AUTO = 7
+
+    # Mapping of the status message keys to human-readable names
+    config_dict = {
+        "D": ("ID", None),
+        "!": ("Meas. mode", MeasurementMode),
+        "P": ("Meas. interval", None),
+        "E": ("Waveform range", WaveformRange),
+        "N": ("Waveform amplitude", None),
+        "$": ("TIA amplification", TIAAmplification),
+    }
 
     def __init__(self, port_name, baudrate=460800):
         self.timeout = 1
@@ -125,14 +127,10 @@ class Cybres_MU:
             # Check that we are receiving something.
             ok, delay, warn = self.data_watchdog.check(char, r".+")
             if warn:
-                logging.error(
-                    f"Nothing received from Blue box {delay} times longer than expected."
-                )
+                logging.error(f"Nothing received from Blue box {delay} times longer than expected.")
             ok, delay, warn = self.frame_watchdog.check(char, r"A")
             if warn:
-                logging.error(
-                    f"Start char not found {delay} times longer than expected."
-                )
+                logging.error(f"Start char not found {delay} times longer than expected.")
                 logging.debug(f"Current buffer state {debug_buffer}")
 
             if char == "A":
@@ -150,10 +148,7 @@ class Cybres_MU:
             next_char = self.ser.read(1).decode("ascii")
             ok, delay, warn = self.frame_watchdog.check(next_char, r"Z")
             if warn:
-                logging.error(
-                    f"End char not found {delay} times longer than expected.",
-                )
-
+                logging.error(f"End char not found {delay} times longer than expected.")
             if next_char == "Z":
                 end_found = True
             else:
@@ -190,8 +185,7 @@ class Cybres_MU:
         self.data_watchdog.update_limit(interval / 1000)
         self.frame_watchdog.update_limit(interval / 1000)
 
-        set_interval = ",mi{:05}*".format(interval)
-        self.ser.write(set_interval.encode())
+        self.ser.write(f",mi{interval:05}*".encode())
         return self._get_response(sleep_time=0.5)
 
     def set_waveform_amplitude(self, amplitude):
@@ -203,6 +197,10 @@ class Cybres_MU:
 
     def set_waveform_range(self, range: WaveformRange):
         self.ser.write(f",yy{range.value}*".encode())
+        return self._get_response(sleep_time=0.5)
+
+    def set_tia_amplification(self, gain: TIAAmplification):
+        self.ser.write(f",y1{gain.value}*".encode())
         return self._get_response(sleep_time=0.5)
 
     def set_measurement_mode(self, mode: MeasurementMode):
@@ -261,9 +259,23 @@ class Cybres_MU:
             raw[key] = int(value)
 
         for key, value in Cybres_MU.config_dict.items():
-            processed[value] = raw[key]
+            config_value = raw[key]
+            config_enum = value[1]
+            config_name = value[0]
+
+            processed[config_name] = config_enum(config_value) if config_enum is not None else config_value
 
         return processed, raw
+
+    @staticmethod
+    def print_config_dict(cfg):
+        buffer = ""
+        for key, value in cfg.items():
+            if isinstance(value, enum.Enum):
+                buffer += f"    {key}: {value.value} ({value.name})\n"
+            else:
+                buffer += f"    {key}: {value}\n"
+        return buffer
 
 
 def test_mu():

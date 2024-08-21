@@ -64,7 +64,7 @@ class Sensor_Node:
             self.mu_config['FW version'] = version.split(': ')[-1].rstrip('.')
             self.mu_config['meas. config'] = response_lines[4].split('=> ')[-1].rstrip('.')
             if output:
-                logging.info(f"Blue box configuration:{json.dumps(self.mu_config, indent=4)[1:-1]}")
+                logging.info(f"Blue box configuration:\n{Cybres_MU.print_config_dict(self.mu_config)}")
             logging.debug(json.dumps(mu_config_raw, indent=4))
         except (IndexError, ValueError) as e:
             logging.warn(f"Could not parse the initial status message.\n{e}")
@@ -73,19 +73,23 @@ class Sensor_Node:
         """
         Configure the MU device.
         """
-        if self.mu_config.get("measurement_mode") != Cybres_MU.MeasurementMode.CONT_MEAS_FIXED.value:
+        if self.mu_config.get("Meas. mode") != Cybres_MU.MeasurementMode.CONT_MEAS_FIXED:
             response = self.mu.set_measurement_mode(Cybres_MU.MeasurementMode.CONT_MEAS_FIXED)
             logging.debug(response)
 
-        if self.mu_config.get("waveform_range") != Cybres_MU.WaveformRange.RANGE_1V.value:
+        if self.mu_config.get("Waveform range") != Cybres_MU.WaveformRange.RANGE_1V:
             response = self.mu.set_waveform_range(Cybres_MU.WaveformRange.RANGE_1V)
             logging.debug(response)
 
-        if self.mu_config.get("waveform_amplitude") != 120:
+        if self.mu_config.get("Waveform amplitude") != 120:
             response = self.mu.set_waveform_amplitude(120)
             logging.debug(response)
 
-        if self.mu_config.get("measurement_interval") != self.measurment_interval:
+        if self.mu_config.get("TIA amplification") != Cybres_MU.TIAAmplification.GAIN_AUTO:
+            response = self.mu.set_tia_amplification(Cybres_MU.TIAAmplification.GAIN_AUTO)
+            logging.debug(response)
+
+        if self.mu_config.get("Meas. interval") != self.measurment_interval:
             response = self.mu.set_measurement_interval(self.measurment_interval)
             logging.debug(response)
 
