@@ -118,69 +118,64 @@ class Sensor_Node:
         self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
         last_time = datetime.datetime.now()
 
-        # Create temporary file to signal that measurement is active.
-        prefix = f"{self.file_prefix.split('_')[-1]} ({self.mu_config.get('ID', 'ID NA')})_"
-
         # Measure the average time between measurements.
         time_length = 100
         loop = {"start": time.time(), "duration": [0] * time_length}
         processing = {"start": time.time(), "duration": [0] * time_length}
         time_index = 0
 
-        # FIXME: Tempfile does not get deleted on SIGKILL
-        with tempfile.NamedTemporaryFile(prefix=prefix, dir=self.status_dir):
-            while True:
-                # Create a new csv file after the specified interval.
-                current_time = datetime.datetime.now()
-                if current_time.hour in {0, 12} and current_time.hour != last_time.hour:
-                    logging.info("Creating a new csv file.")
-                    file_name = f"{self.file_prefix}_{current_time.strftime(TimeFormat.file)}.csv"
-                    self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
-                    last_time = current_time
+        while True:
+            # Create a new csv file after the specified interval.
+            current_time = datetime.datetime.now()
+            if current_time.hour in {0, 12} and current_time.hour != last_time.hour:
+                logging.info("Creating a new csv file.")
+                file_name = f"{self.file_prefix}_{current_time.strftime(TimeFormat.file)}.csv"
+                self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
+                last_time = current_time
 
-                # Get the next data line.
-                next_line = self.mu.get_next()
-                loop["duration"][time_index] = time.time() - loop["start"]
-                loop["start"] = time.time()
-                processing["start"] = time.time()
-                header, payload = self.classify_message(next_line)
+            # Get the next data line.
+            next_line = self.mu.get_next()
+            loop["duration"][time_index] = time.time() - loop["start"]
+            loop["start"] = time.time()
+            processing["start"] = time.time()
+            header, payload = self.classify_message(next_line)
 
-                # Send data to Edge device via ZMQ if it's valid.
-                if header is not None:
-                    self.pub.publish(header, self.additionalSensors, payload)
+            # Send data to Edge device via ZMQ if it's valid.
+            if header is not None:
+                self.pub.publish(header, self.additionalSensors, payload)
 
-                # Store the data to the csv file.
-                if header is not None and header[1] == 1:
-                    self.msg_count += 1
-                    try:
-                        wrong_values = self.csv_object.write2csv([self.hostname] + payload)
-                        #  self.client.add_data(payload, self.additionalSensors)
-                        if wrong_values:
-                            warning = f"[Warning] Unexpected values for:\n{self.device}\n{wrong_values}"
-                            self.notify_pub.publish(warning, topic="value")
+            # Store the data to the csv file.
+            if header is not None and header[1] == 1:
+                self.msg_count += 1
+                try:
+                    wrong_values = self.csv_object.write2csv([self.hostname] + payload)
+                    #  self.client.add_data(payload, self.additionalSensors)
+                    if wrong_values:
+                        warning = f"[Warning] Unexpected values for:\n{self.device}\n{wrong_values}"
+                        self.notify_pub.publish(warning, topic="value")
 
-                    except Exception as e:
-                        logging.error(
-                            "Writing to csv file failed with error:\n%s\n\n\
-                            Continuing because this is not a fatal error.",
-                            e,
-                        )
-                        self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="error")
+                except Exception as e:
+                    logging.error(
+                        "Writing to csv file failed with error:\n%s\n\n\
+                        Continuing because this is not a fatal error.",
+                        e,
+                    )
+                    self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="error")
 
-                # Record the time taken to process the data.
-                processing["duration"][time_index] = time.time() - processing["start"]
-                time_index += 1
-                if time_index == time_length:
-                    logging.debug("Average loop time: %f", sum(loop["duration"]) / time_length)
-                    logging.debug("Average processing time: %f", sum(processing["duration"]) / time_length)
-                    time_index = 0
+            # Record the time taken to process the data.
+            processing["duration"][time_index] = time.time() - processing["start"]
+            time_index += 1
+            if time_index == time_length:
+                logging.debug("Average loop time: %f", sum(loop["duration"]) / time_length)
+                logging.debug("Average processing time: %f", sum(processing["duration"]) / time_length)
+                time_index = 0
 
-                # Print out a status message roughly every 30 mins
-                if self.msg_count % 180 == 0 and self.msg_count > 0:
-                    td = datetime.datetime.now() - self.start_time
-                    hms = (td.seconds // 3600, td.seconds // 60 % 60, td.seconds % 60)
-                    duration = f"{td.days} days, {hms[0] :02}:{hms[1] :02}:{hms[2] :02} [HH:MM:SS]"
-                    logging.info("I am measuring for %s and I collected %d datapoints.", duration, self.msg_count)
+            # Print out a status message roughly every 30 mins
+            if self.msg_count % 180 == 0 and self.msg_count > 0:
+                td = datetime.datetime.now() - self.start_time
+                hms = (td.seconds // 3600, td.seconds // 60 % 60, td.seconds % 60)
+                duration = f"{td.days} days, {hms[0] :02}:{hms[1] :02}:{hms[2] :02} [HH:MM:SS]"
+                logging.info("I am measuring for %s and I collected %d datapoints.", duration, self.msg_count)
 
     def classify_message(self, mu_line):
         """
