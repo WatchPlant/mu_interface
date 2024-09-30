@@ -34,9 +34,9 @@ def sim_real_time(client):
         for node in dataframes:
             data_line = dataframes[node].iloc[i]
             # current utc time
-            timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             data = data_line.to_dict()
-            client.add_data2(data, timestamp, node)
+            client.add_data(data, timestamp, node)
         time.sleep(10)
 
 

@@ -18,8 +18,8 @@ from mu_interface.Utilities.log_formatter import setup_logger
 class DateRange(Enum):
     LAST_HOUR = "last_hour"
     LAST_DAY = "last_day"
-    MONTH = "month"
-    TWELVE_MONTHS = "twelve_months"
+    LAST_MONTH = "month"
+    LAST_YEAR = "twelve_months"
 
 
 url = os.environ["WP_API_URL"]
@@ -40,10 +40,9 @@ class HTTPClient(object):
         self.known_data_fields = None
         self.known_nodes = None
 
-        # if not self.node_exists():
-        #     self.register_node()
+        if not self.node_exists():
+            self.register_node()
 
-    # DONE+
     def get_nodes(self):
         """Get the list of nodes currently on the website."""
         query = "nodes"
@@ -59,8 +58,7 @@ class HTTPClient(object):
         self.known_nodes = [x["handle"] for x in parsed["data"]]
         return parsed["data"]
 
-    # DONE+
-    def node_exists(self, node_handle=None):
+    def node_exists(self, node_handle=None, force_refresh=False):
         """
         Check if a given node already exists on the website.
 
@@ -73,11 +71,10 @@ class HTTPClient(object):
         if node_handle is None:
             node_handle = self.node_handle
 
-        if self.known_nodes is None:
+        if self.known_nodes is None or force_refresh:
             self.get_nodes()
         return node_handle in self.known_nodes
 
-    # DONE+
     def add_node(self, node_handle, display_name):
         """
         Add a new node to the website.
@@ -112,12 +109,10 @@ class HTTPClient(object):
 
         return True
 
-    # DONE+
     def register_node(self):
         """Add a node with parameters specified in the constructor."""
         self.add_node(self.node_handle, self.display_name)
 
-    # DONE+
     def delete_node(self, node_handle):
         """
         Delete the node with the matching handle.
@@ -140,7 +135,6 @@ class HTTPClient(object):
 
         return True
 
-    # DONE+
     def get_data_fields(self):
         """Return all available data fields on the website."""
         query = "data-field"
@@ -156,7 +150,6 @@ class HTTPClient(object):
         self.known_data_fields = [x["handle"] for x in parsed["data"]]
         return parsed["data"]
 
-    # DONE+
     def add_data_field(self, field_handle, field_name, unit):
         """
         Specify a new data field to be displayed on the website.
@@ -185,7 +178,6 @@ class HTTPClient(object):
 
         return True
 
-    # DONE+
     def delete_data_field(self, data_handle):
         """
         Delete data field with matching handle.
@@ -208,8 +200,7 @@ class HTTPClient(object):
 
         return True
 
-    # DONE+
-    def get_data(self, date_range: DateRange, node_handles=None,):
+    def get_data(self, date_range: DateRange, node_handles=None):
         """
         Return all data entries from specified nodes.
 
@@ -250,12 +241,13 @@ class HTTPClient(object):
         parsed = json.loads(response.text)
         return parsed["data"]
 
-    # DONE+
     def add_data(self, data, timestamp, node_handle=None):
         """
         Add a single measurement set to the website.
 
         Args:
+            data (dict): Dictionary with the data to be added.
+            timestamp (str): UTC timestamp of the data in "%Y-%m-%d %H:%M:%S" format.
             node_handle (str): Node that collected the data. If None, it assumes itself as collector.
 
         Returns:
@@ -298,11 +290,80 @@ def main():
     logging.info("Starting HTTP client.")
 
     client = HTTPClient("dev", "Development Node")
+    sim_real_time(client)
 
+
+def test():
+    """It would be better to write using unittest, but we are actually interested to see how the API responds."""
+    import time
+    import datetime
+    import pandas as pd
+    from pathlib import Path
+
+    # Setup logging.
+    setup_logger("TEST", level=logging.INFO)
+    logging.info("Starting HTTP client.")
+
+    # Create the client.
+    client = HTTPClient("dev", "Development Node")
+
+    # Test listing the existing nodes.
     print(json.dumps(client.get_nodes(), indent=2))
-    print(json.dumps(client.get_data(DateRange.LAST_DAY, "rpi0"), indent=2))
-    # sim_real_time(client)
+
+    # Test adding and deleting nodes.
+    print(f"Node 'rpi0' exists: {client.node_exists('rpi0')}")
+    print(f"Node 'test' exists: {client.node_exists('test')}")
+    print("Adding node 'test'...")
+    client.add_node("test", "Testing node")
+    print(f"Node 'test' exists: {client.node_exists('test', force_refresh=True)}")
+    input("Press Enter to continue...")
+    print("Deleting node 'test'...")
+    client.delete_node("test")
+    print(f"Node 'test' exists: {client.node_exists('test', force_refresh=True)}")
+
+    input("Press Enter to continue...")
+
+    print("Registering node...")
+    client.register_node()
+
+    # Test adding and deleting data fields.
+    print(json.dumps(client.get_data_fields(), indent=2))
+    print("Adding data field 'test'...")
+    client.add_data_field("test", "Test field", "T")
+    print(json.dumps(client.get_data_fields(), indent=2))
+    input("Press Enter to continue...")
+    print("Deleting data field 'test'...")
+    client.delete_data_field("test")
+    print(json.dumps(client.get_data_fields(), indent=2))
+    input("Press Enter to continue...")
+
+    # Test getting data.
+    print("Getting data...")
+    print(json.dumps(client.get_data(DateRange.LAST_YEAR), indent=2))
+    print(json.dumps(client.get_data(DateRange.LAST_YEAR, "rpi0"), indent=2))
+
+    # Test adding data.
+    print("Adding data...")
+    data_file = Path(__file__).parent.absolute() / "data/rpi1_reformatted.csv"
+    config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
+    with open(config_file) as cf:
+        config = yaml.safe_load(cf)
+        keys = [key for key in config if config[key] is True]
+    df = pd.read_csv(data_file, sep=",", header=0)
+    df = df[keys]
+
+    for i in range(6):
+        data_line = df.iloc[i]
+        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        data = data_line.to_dict()
+        client.add_data(data, timestamp)
+        time.sleep(10)
+
+    print(json.dumps(client.get_data(DateRange.LAST_HOUR), indent=2))
+
+    input("Press Enter to continue...")
+    client.delete_node("dev")
 
 
 if __name__ == "__main__":
-    main()
+    test()
