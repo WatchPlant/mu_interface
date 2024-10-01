@@ -23,7 +23,9 @@ class DateRange(Enum):
 
 
 url = os.environ["WP_API_URL"]
-headers = {"Content-Type": "application/json", "Authorization": os.environ["WP_API_AUTH"]}
+headers = {"Content-Type": "application/json",
+           "Accept": "application/json",
+           "Authorization": os.environ["WP_API_AUTH"]}
 
 
 class HTTPClient(object):
