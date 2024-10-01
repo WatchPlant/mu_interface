@@ -5,65 +5,130 @@ import yaml
 from datetime import datetime
 from pathlib import Path
 
+from mu_interface.Utilities.utils import TimeFormat
+
 
 class data2csv:
+    transformations = {
+        "temp_external": (lambda d, c: d[c] / 10000),                                     # Degrees Celsius
+        "temp_PCB": (lambda d, c: d[c] / 10000),                                          # Degrees Celsius
+        "soil_temperature": (lambda d, c: d[c] / 10),                                     # Degrees Celsius
+        "mag_X": (lambda d, c: d[c] / 1000 * 100),                                        # Micro Tesla
+        "mag_Y": (lambda d, c: d[c] / 1000 * 100),                                        # Micro Tesla
+        "mag_Z": (lambda d, c: d[c] / 1000 * 100),                                        # Micro Tesla
+        "light_external": (lambda d, c: d[c] / 799.4 - 0.75056),                          # Lux
+        "humidity_external": (lambda d, c: (d[c] * 3 / 4200000 - 0.1515) / 0.00636),      # Percent (Honeywell HIH-5031)
+        "air_pressure": (lambda d, c: d[c] / 100),                                        # Mili Bars
+        "differential_potential_CH1": (lambda d, c: (d[c] - 512000) / 1000),              # Mili Volts
+        "differential_potential_CH2": (lambda d, c: (d[c] - 512000) / 1000),              # Mili Volts
+        "transpiration": (lambda d, c: d[c] / 1000)                                       # Percent
+    }
+
+    rounding = {
+        "temp_external": 2,
+        "temp_PCB": 2,
+        "soil_temperature": 2,
+        "mag_X": 2,
+        "mag_Y": 2,
+        "mag_Z": 2,
+        "light_external": 1,
+        "humidity_external": 2,
+        "air_pressure": 2,
+        "differential_potential_CH1": 3,
+        "differential_potential_CH2": 3,
+        "transpiration": 2,
+    }
+
+    limits = {
+        "temp_external": (0, 60),
+        "humidity_external": (0, 100),
+    }
 
     def __init__(self, file_path, file_name, additionalSensors, config_file=None):
-
         self.file_path = Path(file_path)
-        self.file_path.mkdir(parents=True, exist_ok=True) # make new directory
+        self.file_path.mkdir(parents=True, exist_ok=True)  # make new directory
         self.file_name = file_name
         self.additionalSensors = additionalSensors
 
-        self.csvfile = open(self.file_path / self.file_name, 'w', newline='')
-        self.csvwriter = csv.writer(self.csvfile)
-
         if additionalSensors == "energy":
-            header = ['timestamp', "bus_voltage_solar", "current_solar", "bus_voltage_battery", "current_battery", "ip0", "ip1", "ip2", "ip3"]
-            self.csvwriter.writerow(header)
-            self.csvfile.close()
+            # TODO: separate from mu_interface
+            self.header = [
+                "bus_voltage_solar",
+                "current_solar",
+                "bus_voltage_battery",
+                "current_battery",
+                "temperature",
+                "humidity",
+            ]
         else:
             if config_file is None:
-                config_file = Path(__file__).parent.absolute() / "config/default_data_fields.yaml"
+                config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
+                if not config_file.exists():
+                    config_file = Path(__file__).parent.absolute() / "config/default_data_fields.yaml"
 
             with open(config_file) as stream:
                 config = yaml.safe_load(stream)
 
-            # Data fields are loaded in their original order by default
-            # and we always want to add our timestamp.
-            header = ['timestamp'] + [key for key in config if config[key] is True] + (additionalSensors if additionalSensors != False else [])
-            self.csvwriter.writerow(header)
-            self.csvfile.close()
+            # Names of stored columns.
+            self.header = [key for key in config if config[key]] + additionalSensors
+            # Indices of stored columns.
+            self.filter = [i for i, x in enumerate(config.values()) if x] + list(
+                range(len(config), len(config) + len(additionalSensors))
+            )
 
-            self.filter = [i for i, x in enumerate(config.values()) if x] + ([j + len(config) for j in range(len(additionalSensors))] if additionalSensors != False else [])
+        with open(self.file_path / self.file_name, "w", newline="") as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(["datetime"] + self.header)
 
-    def close_file(self):
-        self.csvfile.close()
-        
     def fix_ownership(self):
         """Change the owner of the file to SUDO_UID"""
-        uid = os.environ.get('SUDO_UID')
-        gid = os.environ.get('SUDO_GID')
-        if uid is not None:
+        uid = os.environ.get("SUDO_UID")
+        gid = os.environ.get("SUDO_GID")
+        if uid is not None and gid is not None:
             full_path = self.file_path / self.file_name
             os.chown(full_path, int(uid), int(gid))
             for p in list(full_path.parents)[:-3]:
                 os.chown(p, int(uid), int(gid))
 
     def write2csv(self, data):
-        try:
-            if self.additionalSensors == "energy":
-                timestamp = datetime.fromtimestamp(data[0])
-                filtered_data = data[1:]
-            else:
-                timestamp = datetime.fromtimestamp(data[3]).strftime("%Y-%m-%d %H:%M:%S")
-                filtered_data = [data[i] for i in self.filter]
+        wrong_values = ""
+        if self.additionalSensors == "energy":
+            timestamp = datetime.fromtimestamp(data[0])
+            filtered_data = data[1:]
+        else:
+            timestamp = datetime.fromtimestamp(data[3]).strftime(TimeFormat.data)
+            filtered_data = [data[i] for i in self.filter]
+            # df = DataFrame(data=[filtered_data], columns=self.header)
+            # filtered_data = data2csv.transform_data(df)
+            filtered_data, wrong_values = data2csv.transform_data(filtered_data, self.header)
 
-            data4csv = [timestamp] + filtered_data
-            self.csvfile = open(self.file_path / self.file_name, 'a', newline='')
-            self.csvwriter = csv.writer(self.csvfile)
-            self.csvwriter.writerow(data4csv)
-            self.csvfile.close()
-            
-        except Exception as e:
-            return e
+        data4csv = [timestamp] + filtered_data
+        with open(self.file_path / self.file_name, "a", newline="") as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(data4csv)
+
+        return wrong_values
+
+
+    # @staticmethod
+    # def transform_data(df):
+    #     for column in df.columnsns:
+    #         if column in data2csv.transformations:
+    #             df[column] = round(data2csv.transformations[column](df, column), data2csv.rounding[column])
+
+    #     return df.iloc[0].tolist()
+
+    @staticmethod
+    def transform_data(data, header):
+        wrong_values = []
+        df = {header[i]: data[i] for i in range(len(data))}
+        for i in range(len(data)):
+            key = header[i]
+            if key in data2csv.transformations:
+                data[i] = round(data2csv.transformations[key](df, key), data2csv.rounding.get(key, 2))
+
+            if key in data2csv.limits:
+                if data[i] < data2csv.limits[key][0] or data[i] > data2csv.limits[key][1]:
+                    wrong_values.append(f"* {key} = {data[i]}")
+
+        return data, "\n".join(wrong_values)
