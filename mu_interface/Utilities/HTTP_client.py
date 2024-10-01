@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # from datetime import datetime
+import datetime
 import json
 import logging
 import os
@@ -29,10 +30,12 @@ headers = {"Content-Type": "application/json",
 
 
 class HTTPClient(object):
-    def __init__(self, node_handle, display_name) -> None:
+    timestamp_format = "%Y-%m-%d %H:%M:%S"
+
+    def __init__(self, node_handle, display_name=None) -> None:
         # Get the list of nodes currently on the website.
         self.node_handle = node_handle
-        self.display_name = display_name
+        self.display_name = display_name if display_name is not None else node_handle
 
         self.session = requests.Session()
         retries = Retry(total=3, backoff_factor=0.5)
@@ -75,6 +78,9 @@ class HTTPClient(object):
 
         if self.known_nodes is None or force_refresh:
             self.get_nodes()
+
+        print(self.known_nodes, node_handle)
+
         return node_handle in self.known_nodes
 
     def add_node(self, node_handle, display_name):
@@ -243,13 +249,13 @@ class HTTPClient(object):
         parsed = json.loads(response.text)
         return parsed["data"]
 
-    def add_data(self, data, timestamp, node_handle=None):
+    def add_data(self, timestamp, data, node_handle=None):
         """
         Add a single measurement set to the website.
 
         Args:
+            timestamp (datetime or str): UTC timestamp of the data in "%Y-%m-%d %H:%M:%S" format.
             data (dict): Dictionary with the data to be added.
-            timestamp (str): UTC timestamp of the data in "%Y-%m-%d %H:%M:%S" format.
             node_handle (str): Node that collected the data. If None, it assumes itself as collector.
 
         Returns:
@@ -257,6 +263,12 @@ class HTTPClient(object):
         """
         if node_handle is None:
             node_handle = self.node_handle
+
+        try:
+            timestamp = self.validate_timestamp(timestamp)
+        except ValueError as e:
+            logging.error(e)
+            return False
 
         query = "sensordata"
         payload = {"node_handle": node_handle, "data": data, "date": timestamp}
@@ -272,6 +284,16 @@ class HTTPClient(object):
             return False
 
         return True
+
+    @staticmethod
+    def validate_timestamp(timestamp):
+        if isinstance(timestamp, datetime.datetime):
+            return timestamp.astimezone(datetime.timezone.utc).strftime(HTTPClient.timestamp_format)
+        elif isinstance(timestamp, str):
+            datetime.datetime.strptime(timestamp, HTTPClient.timestamp_format)
+            return timestamp
+        else:
+            raise ValueError("Timestamp must be either a datetime object or a string.")
 
 
 def add_data_fields_from_yaml(client, yaml_file_path):

@@ -5,7 +5,7 @@ import datetime
 from collections import Counter
 
 from zmq_subscriber import ZMQ_Subscriber
-from mu_interface.Utilities.data2csv import data2csv
+from mu_interface.Utilities.data2csv import CsvStorage
 from mu_interface.Utilities.utils import TimeFormat
 
 class Edge_Device():
@@ -27,7 +27,7 @@ class Edge_Device():
         logging.info("Saving data to: %s", self.csv_path)
         last_csv_time = datetime.datetime.now()
         last_info_time = datetime.datetime.now()
-        
+
         while True:
             header, additionalSensors, payload = self.sub.receive()
             sender = header['name']
@@ -41,7 +41,7 @@ class Edge_Device():
 
                 # Delete csv object if it exists for new sensor config
                 self.csv_objects.pop(sender, None)
-                
+
                 logging.info("Measurement started on node %s at %s", sender, payload[2].split()[1])
                 logging.info("Measurement unit ID: %s", payload[3].split()[1])
             # MU data
@@ -68,7 +68,7 @@ class Edge_Device():
                 td = current_time - self.start_time
                 hms = (td.seconds // 3600, td.seconds // 60 % 60, td.seconds % 60)
                 duration = f"{td.days} days, {hms[0] :02}:{hms[1] :02}:{hms[2] :02} [HH:MM:SS]"
-                logging.info("I am measuring for %s and I collected the following number of datapoints:\n%s", 
+                logging.info("I am measuring for %s and I collected the following number of datapoints:\n%s",
                              duration, "\n".join([f"{key}: {val}" for key, val in self.msg_counter.items()]))
                 last_info_time = current_time
 
@@ -80,7 +80,7 @@ class Edge_Device():
                     file_name = f"{node}_{current_time.strftime(TimeFormat.file)}.csv"
                     file_path = self.csv_objects[node].file_path
                     additionalSensors = copy.deepcopy(self.csv_objects[node].additionalSensors)
-                    self.csv_objects[sender] = data2csv(file_path, file_name, additionalSensors, self.cfg_path)
+                    self.csv_objects[sender] = CsvStorage(file_path, file_name, additionalSensors, self.cfg_path)
                 last_csv_time = current_time
 
 
@@ -89,10 +89,10 @@ class Edge_Device():
         if sender not in self.csv_objects:
             file_name = f"{sender}_{datetime.datetime.now().strftime(TimeFormat.file)}.csv"
             if additionalSensors == "energy":
-                self.csv_objects[sender] = data2csv(self.csv_path / sender / "energy", 
+                self.csv_objects[sender] = CsvStorage(self.csv_path / sender / "energy",
                                                     file_name, additionalSensors, self.cfg_path)
             else:
-                self.csv_objects[sender] = data2csv(self.csv_path / sender[:-5] / sender[-4:], 
+                self.csv_objects[sender] = CsvStorage(self.csv_path / sender[:-5] / sender[-4:],
                                                     file_name, additionalSensors, self.cfg_path)
             logging.info("Created file: %s", file_name)
 
