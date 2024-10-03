@@ -29,13 +29,23 @@ headers = {"Content-Type": "application/json",
            "Authorization": os.environ["WP_API_AUTH"]}
 
 
+website_mapping = {
+    #"OB_MU ID (handle)": "descriptive name",
+    "OB-ZAG-0_CYB1": "Zagreb Test Node",
+}
+
+
 class HTTPClient(object):
     timestamp_format = "%Y-%m-%d %H:%M:%S"
 
     def __init__(self, node_handle, display_name=None) -> None:
-        # Get the list of nodes currently on the website.
         self.node_handle = node_handle
-        self.display_name = display_name if display_name is not None else node_handle
+        self.display_name = website_mapping.get(node_handle, display_name or node_handle)
+
+        self.enabled = True
+        if node_handle.startswith("OB") and node_handle not in website_mapping:
+            self.enabled = False
+            return
 
         self.session = requests.Session()
         retries = Retry(total=3, backoff_factor=0.5)
@@ -47,6 +57,26 @@ class HTTPClient(object):
 
         if not self.node_exists():
             self.register_node()
+
+    def __getattribute__(self, name):
+        """
+        Oh, this is such a hacky way to silently ignore method calls.
+
+        I use it because I want to distribute the same code to all orange
+        boxes and run for all connected MU devices, but I don't want all of them
+        to send data to the website. I don't want to add if statements to every
+        method call, so I just disable the whole thing automatically.
+        """
+        attr = object.__getattribute__(self, name)
+
+        # If the accessed attribute is a method, we need to check 'enabled'
+        if callable(attr) and name != "__init__":
+            def wrapper(*args, **kwargs):
+                # Only call the method if 'enabled' is True
+                if self.enabled:
+                    return attr(*args, **kwargs)
+            return wrapper
+        return attr
 
     def get_nodes(self):
         """Get the list of nodes currently on the website."""
@@ -78,8 +108,6 @@ class HTTPClient(object):
 
         if self.known_nodes is None or force_refresh:
             self.get_nodes()
-
-        print(self.known_nodes, node_handle)
 
         return node_handle in self.known_nodes
 

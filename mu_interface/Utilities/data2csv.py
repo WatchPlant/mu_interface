@@ -78,6 +78,10 @@ class CsvStorage:
 
     def write(self, timestamp, data):
         data4csv = [timestamp] + data
+        # Maybe it would be better to keep the file open constantly. This would
+        # be faster, but it would also be more complicated to close the file on
+        # program exit or exception. Also, closing the file automatically
+        # flushes the buffer.
         with open(self.file_path / self.file_name, "a", newline="") as csvfile:
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(data4csv)
