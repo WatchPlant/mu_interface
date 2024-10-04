@@ -24,16 +24,17 @@ class DateRange(Enum):
 
 
 url = os.environ["WP_API_URL"]
-headers = {"Content-Type": "application/json",
-           "Accept": "application/json",
-           "Authorization": os.environ["WP_API_AUTH"]}
+headers = {"Content-Type": "application/json", "Accept": "application/json", "Authorization": os.environ["WP_API_AUTH"]}
 SLOW_TIMEOUT = 5
 FAST_TIMEOUT = 1
 
 
 website_mapping = {
-    #"OB_MU ID (handle)": "descriptive name",
+    # "OB_MU ID (handle)": "descriptive name",
     "OB-ZAG-0_CYB1": "Zagreb Test Node",
+    "OB-BCN-2_CYB1": "BCN IDAEA Ivy",
+    "OB-BCN-1_CYB1": "BCN Eixample Ivy",
+    "OB-BCN-3_CYB1": "BCN Vic Ivy",
 }
 
 
@@ -56,7 +57,8 @@ class HTTPClient(object):
 
         self.known_data_fields = None
         self.known_nodes = None
-        self.success_tracker = deque([True] * 10, maxlen=10)  # Count how many times the last 10 data additions were successful.
+        # Count how many times the last 10 data additions were successful.
+        self.success_tracker = deque([True] * 10, maxlen=10)
 
         # TODO: what if this hangs?
         self.register_node()
@@ -337,7 +339,12 @@ class HTTPClient(object):
 
         try:
             response = self.session.post(url + query, json=payload, headers=headers, timeout=FAST_TIMEOUT)
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.RequestException, FunctionTimedOut) as e:
+        except (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.RequestException,
+            FunctionTimedOut,
+        ) as e:
             logging.error(f"Error while adding new data to the website: {e}")
             self.success_tracker.append(False)
             return False
@@ -368,8 +375,10 @@ class HTTPClient(object):
             except FunctionTimedOut:
                 logging.error("func_timeout had to terminate the add_data function.")
             except Exception as e:
-                logging.error(f"Uncaught exception in _data_processing_thread: {e}\n"
-                              f"Continuing because this is not a fatal error.")
+                logging.error(
+                    f"Uncaught exception in _data_processing_thread: {e}\n"
+                    f"Continuing because this is not a fatal error."
+                )
             finally:
                 self.queue.task_done()
 
@@ -491,4 +500,5 @@ def test():
 
 if __name__ == "__main__":
     from mu_interface.Utilities.log_formatter import setup_logger
+
     test()
