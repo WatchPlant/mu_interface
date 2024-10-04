@@ -20,8 +20,7 @@ class Sensor_Node:
         self.mu = Cybres_MU(port, baudrate)
         self.pub = ZMQ_Publisher(address)
         self.notify_pub = ZMQ_Publisher_Throttled()
-        # TODO: How to select only some blue boxes to send data to the cloud?
-        self.client = HTTPClient(hostname)
+        self.http_client = HTTPClient(hostname)
         self.hostname = hostname  # e.g. rockpi, OB-ZAG-0
         self.measurment_interval = meas_interval
         self.file_path = file_path  # e.g. /home/rockpi/measurements/OB-ZAG-0_2/MU/CYB1
@@ -104,6 +103,9 @@ class Sensor_Node:
 
         self.file_path = Path(f"{str(self.file_path)} ({self.mu_config.get('ID', 'ID NA')})")
 
+        # Start the HTTP client.
+        self.http_client.start()
+
         # Start measurements.
         self.mu.start_measurement()
 
@@ -145,25 +147,43 @@ class Sensor_Node:
 
             # Store the data to the csv file and optionally send it to the cloud.
             if mu_header is not None and mu_header[1] == 1:
-
                 self.msg_count += 1
+
+                # CSV part
                 try:
                     timestamp = datetime.datetime.fromtimestamp(mu_payload[3])
                     data_line, data_dict, wrong_values = self.csv_object.transform_data(mu_payload)
                     self.csv_object.write(timestamp.strftime(TimeFormat.data), data_line)
-                    self.client.add_data(timestamp, data_dict)
 
                     if wrong_values:
                         warning = f"[Warning] Unexpected values for:\n{self.device}\n{wrong_values}"
-                        self.notify_pub.publish(warning, topic="value")
+                        self.notify_pub.publish(warning, topic="value_out_of_range")
 
                 except Exception as e:
-                    logging.error(
-                        "Writing to csv file failed with error:\n%s\n\n\
-                        Continuing because this is not a fatal error.",
-                        e,
-                    )
-                    self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="error")
+                    logging.error(f"Writing to csv file failed with error:\n{e}\n\n"
+                                  f"Continuing because this is not a fatal error.")
+                    self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="csv_error")
+
+                # Cloud part
+                try:
+                    fail_rate = self.http_client.send(timestamp, data_dict)
+                    if fail_rate is not None and fail_rate > 0.49:
+                        warning_type = "[Error]" if fail_rate > 0.89 else "[Warning]"
+                        warning_text = f"{warning_type} Sending data to the live web view failed in {fail_rate * 100} % of the time."
+                        self.notify_pub.publish(f"{warning_text}\nThis does not affect the experiment, but somebody should take a look.",
+                                                topic=warning_type + "-website")
+                except RuntimeError as e:
+                    logging.error(f"Live web view is unresponsive. Sending data failed:\n{e}\n\n"
+                                  f"Continuing because this is not a fatal error.")
+                    self.notify_pub.publish("[Error]: Sending data to the live web view failed."
+                                            "This does not affect the experiment, but somebody should take a look.",
+                                            topic="website_error")
+                except Exception as e:
+                    logging.error(f"Unhandled exception when sending data to the live web view:\n{e}\n\n"
+                                  f"Continuing because this is not a fatal error.")
+                    self.notify_pub.publish("[Error]: Sending data to the live web view failed."
+                                            "This does not affect the experiment, but somebody should take a look.",
+                                            topic="website_error")
 
             # Record the time taken to process the data.
             processing["duration"][time_index] = time.time() - processing["start"]
@@ -270,7 +290,6 @@ class Sensor_Node:
         """
         self.mu.restart()
         time.sleep(0.5)
-        self.close()
 
     def close(self):
         """
@@ -279,3 +298,4 @@ class Sensor_Node:
         self.mu.ser.close()
         self.pub.socket.close()
         self.pub.context.term()
+        self.http_client.stop()

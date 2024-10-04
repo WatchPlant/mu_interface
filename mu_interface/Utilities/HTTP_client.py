@@ -5,16 +5,15 @@ import datetime
 import json
 import logging
 import os
+import queue
+import threading
+from collections import deque
 from enum import Enum
 
 import requests
 import yaml
 from requests.adapters import HTTPAdapter, Retry
 
-# TODO: remove
-from mu_interface.Utilities.log_formatter import setup_logger
-
-# TODO: error handling
 
 class DateRange(Enum):
     LAST_HOUR = "last_hour"
@@ -27,6 +26,8 @@ url = os.environ["WP_API_URL"]
 headers = {"Content-Type": "application/json",
            "Accept": "application/json",
            "Authorization": os.environ["WP_API_AUTH"]}
+SLOW_TIMEOUT = 5
+FAST_TIMEOUT = 1
 
 
 website_mapping = {
@@ -54,9 +55,17 @@ class HTTPClient(object):
 
         self.known_data_fields = None
         self.known_nodes = None
+        self.success_tracker = deque([True] * 10, maxlen=10)  # Count how many times the last 10 data additions were successful.
 
+        # TODO: what if this hangs?
         if not self.node_exists():
             self.register_node()
+
+        # Separate thread for adding data.
+        self.queue = queue.Queue(maxsize=5)
+        self._stop_event = threading.Event()
+        self.thread = threading.Thread(target=self._add_data_thread, daemon=True)
+        self.thread_started = False
 
     def __getattribute__(self, name):
         """
@@ -75,6 +84,7 @@ class HTTPClient(object):
                 # Only call the method if 'enabled' is True
                 if self.enabled:
                     return attr(*args, **kwargs)
+                logging.debug(f"Attempted to call HTTPClient method '{name}'. Method is disabled.")
             return wrapper
         return attr
 
@@ -83,10 +93,14 @@ class HTTPClient(object):
         query = "nodes"
 
         try:
-            response = self.session.get(url + query, headers=headers)
+            response = self.session.get(url + query, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
         except requests.exceptions.Timeout:
-            logging.error("Timeout while getting the list of nodes.")
+            logging.error("Timeout while getting the list of nodes from the website.")
+            return None
+
+        if not response.ok:
+            logging.error(f"Failed to get existing nodes from the website. Status code {response.status_code}")
             return None
 
         parsed = json.loads(response.text)
@@ -108,6 +122,10 @@ class HTTPClient(object):
 
         if self.known_nodes is None or force_refresh:
             self.get_nodes()
+
+        if self.known_nodes is None:
+            logging.error("Could not get list of nodes from the website.")
+            return False
 
         return node_handle in self.known_nodes
 
@@ -133,14 +151,14 @@ class HTTPClient(object):
 
         response = None
         try:
-            response = requests.request("POST", url + query, json=payload, headers=headers)
+            response = requests.request("POST", url + query, json=payload, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
         except requests.exceptions.Timeout:
-            logging.error("Timeout while waiting to add the new node.")
+            logging.error(f"Timeout while waiting to add node {node_handle} to the website.")
             return False
 
         if not response.ok:
-            logging.error(f"Failed to add node {node_handle}. Status code {response.status_code}")
+            logging.error(f"Failed to add node {node_handle} to the website. Status code {response.status_code}")
             return False
 
         return True
@@ -163,10 +181,14 @@ class HTTPClient(object):
         payload = {"handle": node_handle}
 
         try:
-            response = self.session.post(url + query, json=payload, headers=headers)
+            response = self.session.post(url + query, json=payload, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
         except requests.exceptions.Timeout:
-            logging.error("Timeout while waiting to delete node.")
+            logging.error(f"Timeout while waiting to delete node {node_handle} from the website.")
+            return False
+
+        if not response.ok:
+            logging.error(f"Failed to delete node {node_handle} from the website. Status code {response.status_code}")
             return False
 
         return True
@@ -176,10 +198,14 @@ class HTTPClient(object):
         query = "data-field"
         response = None
         try:
-            response = self.session.get(url + query, headers=headers)
+            response = self.session.get(url + query, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
         except requests.exceptions.Timeout:
-            logging.error("Timeout while waiting for the current list of data fields.")
+            logging.error("Timeout while waiting for the current list of data fields from the website.")
+            return None
+
+        if not response.ok:
+            logging.error(f"Failed to get existing data fields from the website. Status code {response.status_code}")
             return None
 
         parsed = json.loads(response.text)
@@ -202,19 +228,19 @@ class HTTPClient(object):
         payload = {"name": field_name, "handle": field_handle, "unit": unit}
 
         try:
-            response = self.session.post(url + query, json=payload, headers=headers)
+            response = self.session.post(url + query, json=payload, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
         except requests.exceptions.Timeout:
-            logging.error("Timeout while waiting to add the new data field.")
+            logging.error(f"Timeout while waiting to add data field {field_handle} to the website.")
             return False
 
         if not response.ok:
-            logging.error(f"Failed to add data field {field_handle}. Status code {response.status_code}")
+            logging.error(f"Failed to add data field {field_handle} to the website. Status code {response.status_code}")
             return False
 
         return True
 
-    def delete_data_field(self, data_handle):
+    def delete_data_field(self, field_handle):
         """
         Delete data field with matching handle.
 
@@ -225,13 +251,17 @@ class HTTPClient(object):
             True if a successful response is received, False otherwise.
         """
         query = "data-field/delete"
-        payload = {"handle": data_handle}
+        payload = {"handle": field_handle}
 
         try:
-            response = self.session.post(url + query, json=payload, headers=headers)
+            response = self.session.post(url + query, json=payload, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
         except requests.exceptions.Timeout:
-            logging.error("Timeout while waiting to delete data field.")
+            logging.error(f"Timeout while waiting to delete data field {field_handle} from the website.")
+            return False
+
+        if not response.ok:
+            logging.error(f"Failed to delete field {field_handle} from the website. Status code {response.status_code}")
             return False
 
         return True
@@ -264,14 +294,14 @@ class HTTPClient(object):
         payload = {"node_handles": node_handles, "date_range": date_range.value}
 
         try:
-            response = self.session.post(f"{url}{query}", json=payload, headers=headers)
+            response = self.session.post(f"{url}{query}", json=payload, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
         except requests.exceptions.Timeout:
-            logging.error("Timeout while waiting to retrieve data.")
+            logging.error("Timeout while waiting to retrieve data from the website.")
             return False
 
         if not response.ok:
-            logging.error(f"Failed to retrieve data. Status code {response.status_code}")
+            logging.error(f"Failed to retrieve data from the website. Status code {response.status_code}")
             return False
 
         parsed = json.loads(response.text)
@@ -296,22 +326,65 @@ class HTTPClient(object):
             timestamp = self.validate_timestamp(timestamp)
         except ValueError as e:
             logging.error(e)
+            self.success_tracker.append(False)
             return False
 
         query = "sensordata"
         payload = {"node_handle": node_handle, "data": data, "date": timestamp}
 
         try:
-            response = self.session.post(url + query, json=payload, headers=headers)
-        except requests.exceptions.Timeout:
-            logging.error("Timeout while waiting to add the new data")
+            response = self.session.post(url + query, json=payload, headers=headers, timeout=FAST_TIMEOUT)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+            logging.error(f"Error while adding the new data to the website: {e}")
+            self.success_tracker.append(False)
             return False
 
         if not response.ok:
-            logging.error(f"Failed to add data. Status code {response.status_code}")
+            logging.error(f"Failed to add data to the website. Status code {response.status_code}")
+            self.success_tracker.append(False)
             return False
 
+        self.success_tracker.append(True)
         return True
+
+    def send(self, timestamp, data):
+        try:
+            self.queue.put_nowait((timestamp, data))
+        except queue.Full:
+            raise RuntimeError("HTTP client queue is full. This means the client is stuck.")
+
+        return self.success_tracker.count(False) / len(self.success_tracker)
+
+    def _add_data_thread(self):
+        while not self._stop_event.is_set():
+            print(f"Stop event set before? {self._stop_event.is_set()}")
+            try:
+                timestamp, data = self.queue.get()
+                if data is None:  # Gracefully stop the thread if None is received.
+                    break
+                print(f"Adding data: {timestamp}")
+                self.add_data(timestamp, data)  # TODO: If this hangs, the thread will be stuck.
+                print(f"Data added: {timestamp}")
+                print(f"Stop event set after? {self._stop_event.is_set()}")
+            except Exception as e:
+                logging.error(f"Uncaught exception in _add_data_thread: {e}\n"
+                              f"Continuing because this is not a fatal error.")
+            finally:
+                self.queue.task_done()
+        print("HTTP client thread stopped.")
+
+    def start(self):
+        self.thread.start()
+        self.thread_started = True
+
+    def stop(self):
+        print("Stopping HTTP client...")
+        if self.enabled and self.thread_started:
+            self._stop_event.set()
+            self.queue.put_nowait((None, None))
+            self.thread.join()
+            self.thread_started = False
+        print("HTTP client stopped.")
 
     @staticmethod
     def validate_timestamp(timestamp):
@@ -347,10 +420,11 @@ def main():
 
 def test():
     """It would be better to write using unittest, but we are actually interested to see how the API responds."""
-    import time
     import datetime
-    import pandas as pd
+    import time
     from pathlib import Path
+
+    import pandas as pd
 
     # Setup logging.
     setup_logger("TEST", level=logging.INFO)
@@ -418,4 +492,5 @@ def test():
 
 
 if __name__ == "__main__":
+    from mu_interface.Utilities.log_formatter import setup_logger
     test()

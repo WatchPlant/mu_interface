@@ -76,6 +76,7 @@ if __name__ == "__main__":
             SN.stop()
             time.sleep(1.0)
             SN.shutdown()
+            SN.close()
             time.sleep(5.0)
             sys.exit(0)
         # There was a timeout while writing or reading from the device.
