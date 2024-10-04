@@ -20,7 +20,7 @@ class Sensor_Node:
         self.mu = Cybres_MU(port, baudrate)
         self.pub = ZMQ_Publisher(address)
         self.notify_pub = ZMQ_Publisher_Throttled()
-        self.http_client = HTTPClient(hostname)
+        self.http_client = None
         self.hostname = hostname  # e.g. rockpi, OB-ZAG-0
         self.measurment_interval = meas_interval
         self.file_path = file_path  # e.g. /home/rockpi/measurements/OB-ZAG-0_2/MU/CYB1
@@ -104,6 +104,7 @@ class Sensor_Node:
         self.file_path = Path(f"{str(self.file_path)} ({self.mu_config.get('ID', 'ID NA')})")
 
         # Start the HTTP client.
+        self.http_client = HTTPClient(self.hostname)
         self.http_client.start()
 
         # Start measurements.
@@ -298,4 +299,5 @@ class Sensor_Node:
         self.mu.ser.close()
         self.pub.socket.close()
         self.pub.context.term()
-        self.http_client.stop()
+        if self.http_client:
+            self.http_client.stop()

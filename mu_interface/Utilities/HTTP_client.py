@@ -13,6 +13,7 @@ from enum import Enum
 import requests
 import yaml
 from requests.adapters import HTTPAdapter, Retry
+from func_timeout import func_timeout, FunctionTimedOut
 
 
 class DateRange(Enum):
@@ -58,13 +59,12 @@ class HTTPClient(object):
         self.success_tracker = deque([True] * 10, maxlen=10)  # Count how many times the last 10 data additions were successful.
 
         # TODO: what if this hangs?
-        if not self.node_exists():
-            self.register_node()
+        self.register_node()
 
         # Separate thread for adding data.
-        self.queue = queue.Queue(maxsize=5)
+        self.queue = queue.Queue(maxsize=10)
         self._stop_event = threading.Event()
-        self.thread = threading.Thread(target=self._add_data_thread, daemon=True)
+        self.thread = threading.Thread(target=self._data_processing_thread, daemon=True)
         self.thread_started = False
 
     def __getattribute__(self, name):
@@ -95,7 +95,7 @@ class HTTPClient(object):
         try:
             response = self.session.get(url + query, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
-        except requests.exceptions.Timeout:
+        except (requests.exceptions.Timeout, FunctionTimedOut):
             logging.error("Timeout while getting the list of nodes from the website.")
             return None
 
@@ -153,7 +153,7 @@ class HTTPClient(object):
         try:
             response = requests.request("POST", url + query, json=payload, headers=headers, timeout=SLOW_TIMEOUT)
             logging.debug(response.text)
-        except requests.exceptions.Timeout:
+        except (requests.exceptions.Timeout, FunctionTimedOut):
             logging.error(f"Timeout while waiting to add node {node_handle} to the website.")
             return False
 
@@ -165,7 +165,10 @@ class HTTPClient(object):
 
     def register_node(self):
         """Add a node with parameters specified in the constructor."""
-        self.add_node(self.node_handle, self.display_name)
+        try:
+            func_timeout(SLOW_TIMEOUT, self.add_node, args=(self.node_handle, self.display_name))
+        except FunctionTimedOut:
+            logging.error("func_timeout had to terminate the add_node or some downstream function.")
 
     def delete_node(self, node_handle):
         """
@@ -334,8 +337,8 @@ class HTTPClient(object):
 
         try:
             response = self.session.post(url + query, json=payload, headers=headers, timeout=FAST_TIMEOUT)
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
-            logging.error(f"Error while adding the new data to the website: {e}")
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.RequestException, FunctionTimedOut) as e:
+            logging.error(f"Error while adding new data to the website: {e}")
             self.success_tracker.append(False)
             return False
 
@@ -355,36 +358,31 @@ class HTTPClient(object):
 
         return self.success_tracker.count(False) / len(self.success_tracker)
 
-    def _add_data_thread(self):
+    def _data_processing_thread(self):
         while not self._stop_event.is_set():
-            print(f"Stop event set before? {self._stop_event.is_set()}")
             try:
                 timestamp, data = self.queue.get()
                 if data is None:  # Gracefully stop the thread if None is received.
                     break
-                print(f"Adding data: {timestamp}")
-                self.add_data(timestamp, data)  # TODO: If this hangs, the thread will be stuck.
-                print(f"Data added: {timestamp}")
-                print(f"Stop event set after? {self._stop_event.is_set()}")
+                func_timeout(SLOW_TIMEOUT, self.add_data, args=(timestamp, data))
+            except FunctionTimedOut:
+                logging.error("func_timeout had to terminate the add_data function.")
             except Exception as e:
-                logging.error(f"Uncaught exception in _add_data_thread: {e}\n"
+                logging.error(f"Uncaught exception in _data_processing_thread: {e}\n"
                               f"Continuing because this is not a fatal error.")
             finally:
                 self.queue.task_done()
-        print("HTTP client thread stopped.")
 
     def start(self):
         self.thread.start()
         self.thread_started = True
 
     def stop(self):
-        print("Stopping HTTP client...")
         if self.enabled and self.thread_started:
             self._stop_event.set()
-            self.queue.put_nowait((None, None))
+            self.queue.put((None, None))
             self.thread.join()
             self.thread_started = False
-        print("HTTP client stopped.")
 
     @staticmethod
     def validate_timestamp(timestamp):
