@@ -25,8 +25,8 @@ class DateRange(Enum):
 
 url = os.environ["WP_API_URL"]
 headers = {"Content-Type": "application/json", "Accept": "application/json", "Authorization": os.environ["WP_API_AUTH"]}
-SLOW_TIMEOUT = 5
-FAST_TIMEOUT = 1
+SLOW_TIMEOUT = 7
+FAST_TIMEOUT = 5
 
 
 website_mapping = {
@@ -41,7 +41,7 @@ website_mapping = {
 class HTTPClient(object):
     timestamp_format = "%Y-%m-%d %H:%M:%S"
 
-    def __init__(self, node_handle, display_name=None) -> None:
+    def __init__(self, node_handle, display_name=None, timeout=2) -> None:
         self.node_handle = node_handle
         self.display_name = website_mapping.get(node_handle, display_name or node_handle)
 
@@ -54,14 +54,19 @@ class HTTPClient(object):
         retries = Retry(total=3, backoff_factor=0.5)
         self.session.mount("http://", HTTPAdapter(max_retries=retries))
         self.session.mount("https://", HTTPAdapter(max_retries=retries))
+        self.fast_timeout = min(timeout, FAST_TIMEOUT)
 
         self.known_data_fields = None
         self.known_nodes = None
         # Count how many times the last 10 data additions were successful.
         self.success_tracker = deque([True] * 10, maxlen=10)
 
-        # TODO: what if this hangs?
-        self.register_node()
+        try:
+            self.register_node()
+        except Exception as e:
+            logging.warning(f"Could not register node {node_handle} on the website."
+                            f"I will try to pretend node is already registerd, but this might trow error later.e"
+                            f"Full error: {e}")
 
         # Separate thread for adding data.
         self.queue = queue.Queue(maxsize=10)
@@ -338,7 +343,7 @@ class HTTPClient(object):
         payload = {"node_handle": node_handle, "data": data, "date": timestamp}
 
         try:
-            response = self.session.post(url + query, json=payload, headers=headers, timeout=FAST_TIMEOUT)
+            response = self.session.post(url + query, json=payload, headers=headers, timeout=self.fast_timeout)
         except (
             requests.exceptions.Timeout,
             requests.exceptions.ConnectionError,

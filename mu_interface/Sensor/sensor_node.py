@@ -104,7 +104,7 @@ class Sensor_Node:
         self.file_path = Path(f"{str(self.file_path)} ({self.mu_config.get('ID', 'ID NA')})")
 
         # Start the HTTP client.
-        self.http_client = HTTPClient(self.hostname)
+        self.http_client = HTTPClient(self.hostname, timeout=self.measurment_interval / 1000)
         self.http_client.start()
 
         # Start measurements.
