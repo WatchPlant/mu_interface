@@ -136,7 +136,13 @@ class Sensor_Node:
                 last_time = current_time
 
             # Get the next data line.
-            next_line = self.mu.get_next()
+            try:
+                next_line = self.mu.get_next()
+            except TimeoutError:
+                logging.error("Caught timeout error while reading from Blue box.")
+                self.notify_pub.publish("[Error]: No data received from Blue box.", topic="timeout_error")
+                continue
+
             loop["duration"][time_index] = time.time() - loop["start"]
             loop["start"] = time.time()
             processing["start"] = time.time()
