@@ -3,7 +3,6 @@ import json
 import time
 import logging
 import datetime
-import tempfile
 from pathlib import Path
 
 from cybres_mu import Cybres_MU
@@ -11,9 +10,9 @@ from cybres_mu import Cybres_MU
 # from Additional_Sensors.rgbtcs34725 import RGB_TCS34725
 from fake_zmq_publisher import ZMQ_Publisher
 from throttled_zmq_publisher import ZMQ_Publisher_Throttled
-from mu_interface.Utilities.data2csv import data2csv
+from mu_interface.Utilities.data2csv import CsvStorage
 from mu_interface.Utilities.utils import TimeFormat
-# from mu_interface.Utilities.HTTP_client import HTTPClient
+from mu_interface.Utilities.HTTP_client import HTTPClient
 
 
 class Sensor_Node:
@@ -21,7 +20,7 @@ class Sensor_Node:
         self.mu = Cybres_MU(port, baudrate)
         self.pub = ZMQ_Publisher(address)
         self.notify_pub = ZMQ_Publisher_Throttled()
-        # self.client = HTTPClient(hostname, hostname)
+        self.http_client = None
         self.hostname = hostname  # e.g. rockpi, OB-ZAG-0
         self.measurment_interval = meas_interval
         self.file_path = file_path  # e.g. /home/rockpi/measurements/OB-ZAG-0_2/MU/CYB1
@@ -67,7 +66,7 @@ class Sensor_Node:
                 logging.info(f"Blue box configuration:\n{Cybres_MU.print_config_dict(self.mu_config)}")
             logging.debug(json.dumps(mu_config_raw, indent=4))
         except (IndexError, ValueError) as e:
-            logging.warn(f"Could not parse the initial status message.\n{e}")
+            logging.warning(f"Could not parse the initial status message.\n{e}")
 
     def configure(self):
         """
@@ -97,13 +96,16 @@ class Sensor_Node:
         """
         Start the measurements. Continue to publish over MQTT and store to csv.
         """
-
         # Configure the MU device.
         self.get_config()
         self.configure()
         self.get_config(output=True)
 
         self.file_path = Path(f"{str(self.file_path)} ({self.mu_config.get('ID', 'ID NA')})")
+
+        # Start the HTTP client.
+        self.http_client = HTTPClient(self.hostname, timeout=self.measurment_interval / 1000)
+        self.http_client.start()
 
         # Start measurements.
         self.mu.start_measurement()
@@ -115,7 +117,7 @@ class Sensor_Node:
 
         # Create the file for storing measurement data.
         file_name = f"{self.file_prefix}_{self.start_time.strftime(TimeFormat.file)}.csv"
-        self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
+        self.csv_object = CsvStorage(self.file_path, file_name, self.additionalSensors)
         last_time = datetime.datetime.now()
 
         # Measure the average time between measurements.
@@ -130,37 +132,65 @@ class Sensor_Node:
             if current_time.hour in {0, 12} and current_time.hour != last_time.hour:
                 logging.info("Creating a new csv file.")
                 file_name = f"{self.file_prefix}_{current_time.strftime(TimeFormat.file)}.csv"
-                self.csv_object = data2csv(self.file_path, file_name, self.additionalSensors)
+                self.csv_object = CsvStorage(self.file_path, file_name, self.additionalSensors)
                 last_time = current_time
 
             # Get the next data line.
-            next_line = self.mu.get_next()
+            try:
+                next_line = self.mu.get_next()
+            except TimeoutError:
+                logging.error("Caught timeout error while reading from Blue box.")
+                self.notify_pub.publish("[Error]: No data received from Blue box.", topic="timeout_error")
+                continue
+
             loop["duration"][time_index] = time.time() - loop["start"]
             loop["start"] = time.time()
             processing["start"] = time.time()
-            header, payload = self.classify_message(next_line)
+            mu_header, mu_payload = self.classify_message(next_line)
 
             # Send data to Edge device via ZMQ if it's valid.
-            if header is not None:
-                self.pub.publish(header, self.additionalSensors, payload)
+            if mu_header is not None:
+                self.pub.publish(mu_header, self.additionalSensors, mu_payload)
 
-            # Store the data to the csv file.
-            if header is not None and header[1] == 1:
+            # Store the data to the csv file and optionally send it to the cloud.
+            if mu_header is not None and mu_header[1] == 1:
                 self.msg_count += 1
+
+                # CSV part
                 try:
-                    wrong_values = self.csv_object.write2csv([self.hostname] + payload)
-                    #  self.client.add_data(payload, self.additionalSensors)
+                    timestamp = datetime.datetime.fromtimestamp(mu_payload[3])
+                    data_line, data_dict, wrong_values = self.csv_object.transform_data(mu_payload)
+                    self.csv_object.write(timestamp.strftime(TimeFormat.data), data_line)
+
                     if wrong_values:
                         warning = f"[Warning] Unexpected values for:\n{self.device}\n{wrong_values}"
-                        self.notify_pub.publish(warning, topic="value")
+                        self.notify_pub.publish(warning, topic="value_out_of_range")
 
                 except Exception as e:
-                    logging.error(
-                        "Writing to csv file failed with error:\n%s\n\n\
-                        Continuing because this is not a fatal error.",
-                        e,
-                    )
-                    self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="error")
+                    logging.error(f"Writing to csv file failed with error:\n{e}\n\n"
+                                  f"Continuing because this is not a fatal error.")
+                    self.notify_pub.publish("[Error]: Writing data to CSV file failed. Fix ASAP!", topic="csv_error")
+
+                # Cloud part
+                try:
+                    fail_rate = self.http_client.send(timestamp, data_dict)
+                    if fail_rate is not None and fail_rate > 0.49:
+                        warning_type = "[Error]" if fail_rate > 0.89 else "[Warning]"
+                        warning_text = f"{warning_type} Sending data to the live web view failed in {fail_rate * 100} % of the time."
+                        self.notify_pub.publish(f"{warning_text}\nThis does not affect the experiment, but somebody should take a look.",
+                                                topic=warning_type + "-website")
+                except RuntimeError as e:
+                    logging.error(f"Live web view is unresponsive. Sending data failed:\n{e}\n\n"
+                                  f"Continuing because this is not a fatal error.")
+                    self.notify_pub.publish("[Error]: Sending data to the live web view failed."
+                                            "This does not affect the experiment, but somebody should take a look.",
+                                            topic="website_error")
+                except Exception as e:
+                    logging.error(f"Unhandled exception when sending data to the live web view:\n{e}\n\n"
+                                  f"Continuing because this is not a fatal error.")
+                    self.notify_pub.publish("[Error]: Sending data to the live web view failed."
+                                            "This does not affect the experiment, but somebody should take a look.",
+                                            topic="website_error")
 
             # Record the time taken to process the data.
             processing["duration"][time_index] = time.time() - processing["start"]
@@ -191,22 +221,22 @@ class Sensor_Node:
         try:
             counter = mu_line.count("#")
             if counter == 0:
-                # Line is pure data message
+                # Line is pure data message.
                 messagetype = 1
-                transfromed_data = self.transform_data(mu_line)
-                # ID and MM are manually added
-                payload = [self.mu_mm, self.mu_id] + transfromed_data
+                timestamp, measurements = self.transform_data(mu_line)
+                # ID and MM are manually added.
+                payload = [self.hostname, self.mu_mm, self.mu_id, timestamp] + measurements
 
             elif counter == 2:
-                # Line is data message/id/measurement mode
-                # Every 100 measurements the MU sends also its own
-                # ID and measurement mode
+                # Line is data message/id/measurement mode.
+                # Every 100 measurements the MU sends also its own ID and measurement mode.
                 messagetype = 2
                 messages = mu_line.split("#")
                 mu_id = int(messages[1].split(" ")[1])
                 mu_mm = int(messages[2].split(" ")[1])
-                # ID and mm get attached at the back of the data array
-                payload = [mu_mm, mu_id] + self.transform_data(messages[0])
+                timestamp, measurements = self.transform_data(messages[0])
+                # ID and MM are manually added.
+                payload = [self.hostname, mu_mm, mu_id, timestamp] + measurements
 
             elif counter == 4:
                 # Line is header
@@ -217,9 +247,11 @@ class Sensor_Node:
                 lines = {line[0]: line[1] for line in lines}
                 self.mu_id = int(lines['#id'])
                 self.mu_mm = int(lines['#ta'])
+
             else:
                 logging.warning("Unknown data type: \n%s", mu_line)
                 return None, []
+
         except (ValueError, IndexError, KeyError) as e:
             logging.error("Error while parsing the data: %s", e)
             logging.error("Data: %s", mu_line)
@@ -239,18 +271,18 @@ class Sensor_Node:
 
     def transform_data(self, string_data):
         """
-        Transform MU data from string to numpy array.
+        Transform MU data from string to list.
 
         Args:
             string_data (str): MU data in string format.
 
         Returns:
-            A numpy array containing the MU data
+            A list containing the MU data.
         """
         split_data = string_data.split(" ")
-        timestamp = [int(time.mktime(datetime.datetime.now().timetuple()))]
+        timestamp = int(time.mktime(datetime.datetime.now().timetuple()))
         measurements = [int(elem) for elem in split_data[1:]]
-        return timestamp + measurements
+        return timestamp, measurements
 
     def stop(self):
         """
@@ -265,7 +297,6 @@ class Sensor_Node:
         """
         self.mu.restart()
         time.sleep(0.5)
-        self.close()
 
     def close(self):
         """
@@ -274,3 +305,5 @@ class Sensor_Node:
         self.mu.ser.close()
         self.pub.socket.close()
         self.pub.context.term()
+        if self.http_client:
+            self.http_client.stop()

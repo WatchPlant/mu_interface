@@ -1,0 +1,43 @@
+# channel 1
+'VImax_CH1': {name: 'N/A', unit: 'n/a', show: False}
+'VImin_CH1': {name: 'N/A', unit: 'n/a', show: False}
+'RMS_CH1'  : {name: 'N/A', unit: 'n/a', show: False}
+'Phas_CH1' : {name: 'N/A', unit: 'n/a', show: False}
+'VVmax_CH1': {name: 'N/A', unit: 'n/a', show: False}
+'VVmin_CH1': {name: 'N/A', unit: 'n/a', show: False}
+'Corr_CH1' : {name: 'N/A', unit: 'n/a', show: False}
+# channel 2
+'VImax_CH2': {name: 'N/A', unit: 'n/a', show: False}
+'VImin_CH2': {name: 'N/A', unit: 'n/a', show: False}
+'RMS_CH2'  : {name: 'N/A', unit: 'n/a', show: False}
+'Phas_CH2' : {name: 'N/A', unit: 'n/a', show: False}
+'VVmax_CH2': {name: 'N/A', unit: 'n/a', show: False}
+'VVmin_CH2': {name: 'N/A', unit: 'n/a', show: False}
+'Corr_CH2' : {name: 'N/A', unit: 'n/a', show: False}
+# system data
+'temp_PCB'       : {name: 'PCB temp.', unit: '°C', show: False}
+'temp_thermostat': {name: 'Thermostat temp.', unit: '°C', show: False}
+# magnetometer and accelerometer data
+'mag_X': {name: 'Mag. field x', unit: 'uT', show: False}
+'mag_Y': {name: 'Mag. field y', unit: 'uT', show: False}
+'mag_Z': {name: 'Mag. field z', unit: 'uT', show: False}
+'mag_total': {name: 'Mag. field total', unit: 'uT', show: True}
+'acc_X': {name: 'Accel. x', unit: 'n/a', show: False}
+'acc_Y': {name: 'Accel. y', unit: 'n/a', show: False}
+'acc_Z': {name: 'Accel. z', unit: 'n/a', show: False}
+# external sensors
+'temp_external'    : {name: 'External Temperature', unit: '°C', show: True}
+'light_external'   : {name: 'External Light', unit: 'lux', show: True}
+'humidity_external': {name: 'External Humidity', unit: '%', show: True}
+# biopotentials
+'differential_potential_ch1': {name: 'Diff. Potential CH1', unit: 'uV', show: True}
+'differential_potential_ch2': {name: 'Diff. Potential CH2', unit: 'uV', show: True}
+# more external sensors
+'rf_power_emission': {name: 'RF Power Emission', unit: 'n/a', show: True}
+'transpiration'    : {name: 'Transpiration', unit: '%', show: True}
+'sap_flow'         : {name: 'Sap Flow', unit: 'n/a', show: False}
+'air_pressure'     : {name: 'Air Pressure', unit: 'mbar', show: True}
+'soil_moisture'    : {name: 'Soil Moisture', unit: 'n/a' , show: True}
+'soil_temperature' : {name: 'Soil Temperature', unit: '°C', show: True}
+'ambient_light'    : {name: 'Ambient Light', unit: 'n/a', show: False}
+

@@ -52,7 +52,7 @@ if __name__ == "__main__":
     file_prefix = f"{experiment_name}_{port_id}"  # e.g. rockpi_1_ACM0, OB-ZAG-0_2_CYB1
 
     setup_logger(hostname, level=logging.DEBUG if args.debug else logging.INFO)
-    logging.info("Starting sensor node.")
+    logging.info(f"Starting sensor node with hostname: {hostname}")
 
     baud = args.baud
 
@@ -76,6 +76,7 @@ if __name__ == "__main__":
             SN.stop()
             time.sleep(1.0)
             SN.shutdown()
+            SN.close()
             time.sleep(5.0)
             sys.exit(0)
         # There was a timeout while writing or reading from the device.

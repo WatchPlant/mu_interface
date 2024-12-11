@@ -175,3 +175,4 @@ Thumbs.db
 .idea/
 
 mu_interface/Utilities/config/custom_data_fields.yaml
+mu_interface/Utilities/data/*

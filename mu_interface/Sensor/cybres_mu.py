@@ -133,6 +133,9 @@ class Cybres_MU:
                 logging.error(f"Start char not found {delay} times longer than expected.")
                 logging.debug(f"Current buffer state {debug_buffer}")
 
+            if not ok and delay > 10 and warn:
+                raise TimeoutError("No data received from Blue box.")
+
             if char == "A":
                 start_found = True
                 debug_buffer = ""

@@ -2,13 +2,10 @@
 import os
 import csv
 import yaml
-from datetime import datetime
 from pathlib import Path
 
-from mu_interface.Utilities.utils import TimeFormat
 
-
-class data2csv:
+class CsvStorage:
     transformations = {
         "temp_external": (lambda d, c: d[c] / 10000),                                     # Degrees Celsius
         "temp_PCB": (lambda d, c: d[c] / 10000),                                          # Degrees Celsius
@@ -46,35 +43,24 @@ class data2csv:
 
     def __init__(self, file_path, file_name, additionalSensors, config_file=None):
         self.file_path = Path(file_path)
-        self.file_path.mkdir(parents=True, exist_ok=True)  # make new directory
+        self.file_path.mkdir(parents=True, exist_ok=True)
         self.file_name = file_name
         self.additionalSensors = additionalSensors
 
-        if additionalSensors == "energy":
-            # TODO: separate from mu_interface
-            self.header = [
-                "bus_voltage_solar",
-                "current_solar",
-                "bus_voltage_battery",
-                "current_battery",
-                "temperature",
-                "humidity",
-            ]
-        else:
-            if config_file is None:
-                config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
-                if not config_file.exists():
-                    config_file = Path(__file__).parent.absolute() / "config/default_data_fields.yaml"
+        if config_file is None:
+            config_file = Path(__file__).parent.absolute() / "config/custom_data_fields.yaml"
+            if not config_file.exists():
+                config_file = Path(__file__).parent.absolute() / "config/default_data_fields.yaml"
 
-            with open(config_file) as stream:
-                config = yaml.safe_load(stream)
+        with open(config_file) as stream:
+            config = yaml.safe_load(stream)
 
-            # Names of stored columns.
-            self.header = [key for key in config if config[key]] + additionalSensors
-            # Indices of stored columns.
-            self.filter = [i for i, x in enumerate(config.values()) if x] + list(
-                range(len(config), len(config) + len(additionalSensors))
-            )
+        # Names of stored columns.
+        self.header = [key for key in config if config[key]] + additionalSensors
+        # Indices of stored columns.
+        self.filter = [i for i, x in enumerate(config.values()) if x] + list(
+            range(len(config), len(config) + len(additionalSensors))
+        )
 
         with open(self.file_path / self.file_name, "w", newline="") as csvfile:
             csvwriter = csv.writer(csvfile)
@@ -90,45 +76,48 @@ class data2csv:
             for p in list(full_path.parents)[:-3]:
                 os.chown(p, int(uid), int(gid))
 
-    def write2csv(self, data):
-        wrong_values = ""
-        if self.additionalSensors == "energy":
-            timestamp = datetime.fromtimestamp(data[0])
-            filtered_data = data[1:]
-        else:
-            timestamp = datetime.fromtimestamp(data[3]).strftime(TimeFormat.data)
-            filtered_data = [data[i] for i in self.filter]
-            # df = DataFrame(data=[filtered_data], columns=self.header)
-            # filtered_data = data2csv.transform_data(df)
-            filtered_data, wrong_values = data2csv.transform_data(filtered_data, self.header)
-
-        data4csv = [timestamp] + filtered_data
+    def write(self, timestamp, data):
+        data4csv = [timestamp] + data
+        # Maybe it would be better to keep the file open constantly. This would
+        # be faster, but it would also be more complicated to close the file on
+        # program exit or exception. Also, closing the file automatically
+        # flushes the buffer.
         with open(self.file_path / self.file_name, "a", newline="") as csvfile:
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(data4csv)
 
-        return wrong_values
+    def transform_data(self, raw_data):
+        """
+        Transform the raw data to real values.
 
+        1. Filter the data based on selection which columns to store.
+        2. Apply transformation functions to the filtered data.
+        3. Check if the transformed values are within the limits.
 
-    # @staticmethod
-    # def transform_data(df):
-    #     for column in df.columnsns:
-    #         if column in data2csv.transformations:
-    #             df[column] = round(data2csv.transformations[column](df, column), data2csv.rounding[column])
-
-    #     return df.iloc[0].tolist()
-
-    @staticmethod
-    def transform_data(data, header):
+        Returns:
+            transformed_data: list of transformed values
+            transformed_dict: dictionary of transformed values
+            wrong_values: string of out-of-range values
+        """
+        # Filter the data.
+        transformed_data = [raw_data[i] for i in self.filter]
+        # Build a dictionary of raw values. We must not change it because some calculations depend on raw values.
+        raw_dict = {self.header[i]: transformed_data[i] for i in range(len(transformed_data))}
+        transformed_dict = {}
+        # Keep track of out-of-range values.
         wrong_values = []
-        df = {header[i]: data[i] for i in range(len(data))}
-        for i in range(len(data)):
-            key = header[i]
-            if key in data2csv.transformations:
-                data[i] = round(data2csv.transformations[key](df, key), data2csv.rounding.get(key, 2))
 
-            if key in data2csv.limits:
-                if data[i] < data2csv.limits[key][0] or data[i] > data2csv.limits[key][1]:
-                    wrong_values.append(f"* {key} = {data[i]}")
+        for i in range(len(transformed_data)):
+            key = self.header[i]
+            value = transformed_data[i]
+            # If transformation function is defined, apply it. Otherwise, keep the value as is.
+            if key in CsvStorage.transformations:
+                value = round(CsvStorage.transformations[key](raw_dict, key), CsvStorage.rounding.get(key, 2))
+                transformed_data[i] = value
+            transformed_dict[key] = value
 
-        return data, "\n".join(wrong_values)
+            if key in CsvStorage.limits:
+                if transformed_data[i] < CsvStorage.limits[key][0] or transformed_data[i] > CsvStorage.limits[key][1]:
+                    wrong_values.append(f"* {key} = {transformed_data[i]}")
+
+        return transformed_data, transformed_dict, "\n".join(wrong_values)
