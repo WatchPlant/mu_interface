@@ -31,10 +31,12 @@ FAST_TIMEOUT = 5
 
 website_mapping = {
     # "OB_MU ID (handle)": "descriptive name",
-    "OB-ZAG-0_CYB1": "Zagreb Test Node",
-    "OB-BCN-2_CYB1": "BCN IDAEA Ivy",
-    "OB-BCN-1_CYB1": "BCN Eixample Ivy",
-    "OB-BCN-3_CYB1": "BCN Vic Ivy",
+    "OB-ZAG-0_CYB1": "Zagreb Zamia",
+    "OB-BCN-4_CYB1": "Barcelona IDAEA Tomato",
+    "OB-BCN-2_CYB1": "Barcelona IDAEA Ivy",
+    # "OB-SVQ-2_CYB1": "Seville ",
+    # "OB-SVQ-3_CYB1": "Seville ",
+    # "OB-SVQ-3_CYB2": "Seville ",
 }
 
 
