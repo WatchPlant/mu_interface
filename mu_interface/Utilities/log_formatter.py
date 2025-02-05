@@ -33,6 +33,8 @@ class ColoredFormatter(logging.Formatter):
         return result
 
 def setup_logger(name, level=logging.INFO):
+    logging.addLevelName(log_DBGX, "DEBUG")
+
     pathlib.Path('logs').mkdir(exist_ok=True)
 
     logFormatter = logging.Formatter("[%(asctime)s] [%(levelname)s]: %(message)s", '%d.%m.%Y. %H:%M:%S')
@@ -51,9 +53,7 @@ def setup_logger(name, level=logging.INFO):
 
 
 if __name__ == "__main__":
-    logging.addLevelName(log_DBGX, "DEBUG")
-
-    setup_logger("test", log_DBGX)
+    setup_logger("test", logging.DEBUG)
     logging.debug("test")
     logging.info("test")
     logging.warning("test")
