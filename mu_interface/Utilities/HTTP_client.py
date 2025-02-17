@@ -37,6 +37,8 @@ website_mapping = {
     # "OB-SVQ-2_CYB1": "Seville ",
     # "OB-SVQ-3_CYB1": "Seville ",
     # "OB-SVQ-3_CYB2": "Seville ",
+    "OB-ZAG-0_CYB2": "Valencia Demo 1",
+    "OB-ZAG-0_CYB3": "Valencia Demo 2"
 }
 
 
